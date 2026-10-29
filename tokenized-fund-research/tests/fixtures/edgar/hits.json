@@ -1,0 +1,153 @@
+{
+ "hits": {
+  "total": {
+   "value": 5,
+   "relation": "eq"
+  },
+  "hits": [
+   {
+    "_id": "0002014390-24-000001:primary_doc.xml",
+    "_source": {
+     "ciks": [
+      "0002013810"
+     ],
+     "display_names": [
+      "BlackRock USD Institutional Digital Liquidity Fund Ltd.  (CIK 0002013810)"
+     ],
+     "form": "D",
+     "file_type": "D",
+     "root_forms": [
+      "D"
+     ],
+     "file_date": "2024-03-18",
+     "adsh": "0002014390-24-000001",
+     "items": [
+      "06C",
+      "3C",
+      "3C.7"
+     ],
+     "inc_states": [
+      "D8"
+     ],
+     "biz_locations": [
+      "New York, NY"
+     ]
+    }
+   },
+   {
+    "_id": "0002013810-26-000002:primary_doc.xml",
+    "_source": {
+     "ciks": [
+      "0002013810"
+     ],
+     "display_names": [
+      "BlackRock USD Institutional Digital Liquidity Fund Ltd.  (CIK 0002013810)"
+     ],
+     "form": "D/A",
+     "file_type": "D/A",
+     "root_forms": [
+      "D"
+     ],
+     "file_date": "2026-07-27",
+     "adsh": "0002013810-26-000002",
+     "items": [
+      "06C",
+      "3C",
+      "3C.7"
+     ],
+     "inc_states": [
+      "D8"
+     ],
+     "biz_locations": [
+      "New York, NY"
+     ]
+    }
+   },
+   {
+    "_id": "0001213900-26-042685:ex10-9.htm",
+    "_source": {
+     "ciks": [
+      "0002094496",
+      "0001762096"
+     ],
+     "display_names": [
+      "Securitize, Inc.  (CIK 0001762096)",
+      "Securitize Holdings, Inc.  (CIK 0002094496)"
+     ],
+     "form": "S-4/A",
+     "file_type": "S-4/A",
+     "root_forms": [
+      "S-4"
+     ],
+     "file_date": "2026-04-13",
+     "adsh": "0001213900-26-042685",
+     "items": [],
+     "inc_states": [
+      "DE",
+      "DE"
+     ],
+     "biz_locations": [
+      "New York, NY"
+     ]
+    }
+   },
+   {
+    "_id": "0001213900-26-076444:8k.htm",
+    "_source": {
+     "ciks": [
+      "0002094496"
+     ],
+     "display_names": [
+      "Securitize Holdings, Inc.  (CIK 0002094496)"
+     ],
+     "form": "8-K",
+     "file_type": "8-K",
+     "root_forms": [
+      "8-K"
+     ],
+     "file_date": "2026-07-08",
+     "adsh": "0001213900-26-076444",
+     "items": [
+      "1.01",
+      "9.01"
+     ],
+     "inc_states": [
+      "DE"
+     ],
+     "biz_locations": [
+      "New York, NY"
+     ]
+    }
+   },
+   {
+    "_id": "0000000000-25-000009:primary_doc.xml",
+    "_source": {
+     "ciks": [
+      "0000000009"
+     ],
+     "display_names": [
+      "Weird Fund LP (CIK 0000000009)"
+     ],
+     "form": "D",
+     "file_type": "D",
+     "root_forms": [
+      "D"
+     ],
+     "file_date": "2024-03-18",
+     "adsh": "0000000000-25-000009",
+     "items": [
+      "06B",
+      "3C.5",
+      "ZZ"
+     ],
+     "inc_states": [
+      "E9"
+     ],
+     "biz_locations": [
+      "New York, NY"
+     ]
+    }
+   }
+  ]
+ }
+}

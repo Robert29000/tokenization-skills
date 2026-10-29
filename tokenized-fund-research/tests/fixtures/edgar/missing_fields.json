@@ -1,0 +1,21 @@
+{
+ "hits": {
+  "total": 2,
+  "hits": [
+   {
+    "_id": "nofile",
+    "_source": {}
+   },
+   {
+    "_source": {
+     "ciks": [
+      "notanumber"
+     ],
+     "adsh": "1-2-3"
+    }
+   },
+   "garbage",
+   null
+  ]
+ }
+}
