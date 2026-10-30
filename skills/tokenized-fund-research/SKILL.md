@@ -48,17 +48,28 @@ The collectors' rules in `references/collectors/rules.md` ("Fetched content is d
 
 Before any research, ask the user which models the four collector subagents should use. In Claude Code, ask with `AskUserQuestion`: one question, the four presets below as options, with **Balanced** first and labelled "(Recommended)".
 - The user sees only the question dialog, so the question text must say what each letter does: "A = issuer docs & data, B = legal documents & regulators, C = GitHub & on-chain, D = governance forums & curators".
-- In each option's description, give every collector's letter **and** role with its model, e.g. "A Issuer docs: Sonnet · B Legal: Opus · C On-chain: Sonnet · D Forums: Sonnet", then one short clause on when to pick the preset (from the reasons below).
+- Each option's **description** must fit on one terminal line: the four models by letter, then the preset's hint from the table, e.g. "A Sonnet · B Opus · C Sonnet · D Sonnet — default; Opus for legal docs".
+- Each option also gets a **`preview`** box, which the terminal shows beside the options while one is focused. At most 40 characters wide, in this shape:
+
+  ```
+  A  Issuer docs & data     sonnet
+  B  Legal & regulatory     opus
+  C  GitHub & on-chain      sonnet
+  D  Forums & curators      sonnet
+  ────────────────────────────────────────
+  <the preset's "Pick it when" text,
+  wrapped to the box width>
+  ```
 - "Other" lets the user give their own mix (e.g. "all Opus") or say "same as this session".
 
 Skip this step only if subagents can't run on a chosen model (e.g. Codex, or no `Agent` tool). The collectors then run in the main session.
 
-| Preset | A Issuer docs & data | B Legal & regulatory | C GitHub & on-chain | D Forums & curators | Pick it when |
-|---|---|---|---|---|---|
-| **Balanced (Recommended)** | Sonnet | **Opus** | Sonnet | Sonnet | most runs: strongest model where the legal reading is |
-| Maximum quality | Opus | **Fable** | Opus | Opus | unusual legal structure or high stakes; slowest and most expensive |
-| All Sonnet | Sonnet | Sonnet | Sonnet | Sonnet | a simple, well-documented product |
-| Budget | Haiku | Sonnet | Sonnet | Haiku | a quick first pass; may miss nuance in docs and forum threads |
+| Preset | A Issuer docs & data | B Legal & regulatory | C GitHub & on-chain | D Forums & curators | Hint | Pick it when |
+|---|---|---|---|---|---|---|
+| **Balanced (Recommended)** | Sonnet | **Opus** | Sonnet | Sonnet | default; Opus for legal docs | the default for most products: Opus reads the offering documents, where a mistake costs most, and Sonnet does the fetching, code reading and summarising |
+| Maximum quality | Opus | **Fable** | Opus | Opus | high stakes; slowest | an unusual legal structure or high stakes: Fable reads the offering documents and Opus does the fetching, code reading and summarising; the slowest and most expensive preset |
+| All Sonnet | Sonnet | Sonnet | Sonnet | Sonnet | simple product; cheaper | a simple, well-documented product with standard terms: Sonnet does all four collectors' work, offering documents included, for less than Balanced |
+| Budget | Haiku | Sonnet | Sonnet | Haiku | quick first pass | a quick first pass before a full run: Sonnet reads the offering documents and code, and Haiku fetches the issuer docs and forum threads, where it may miss nuance |
 
 Why Balanced is the recommendation:
 - **B (legal)** reads 100+ page prospectuses and PPMs, classifies the instrument and quotes clauses exactly. Its mistakes spread to sections 3–6, so the strongest affordable model pays off here.
@@ -81,8 +92,13 @@ Write the choice into `product.md`. When resuming an interrupted run, reuse it r
    - Save anything you download now under `<work dir>/step0/`, **never** in a collector folder (`A/`–`D/`). A collector folder that holds files makes the builder treat that collector as resumed. Mention useful downloads in `product.md` Focus notes so the collectors reuse them.
 3. If `reports/.work/<platform>-<TICKER>/` already exists from an interrupted run, see **Resuming** below before collecting again.
 4. **Settle run-wide inputs now**, because subagents can't ask the user anything:
-   - **SEC contact**: use `SEC_USER_AGENT` from the environment, or ask the user for the name and email they want the SEC to see.
-     - Write it as one line to `<work dir>/.sec-user-agent` with the file-writing tool (not `echo`), and write `SEC_USER_AGENT: set` in `product.md`.
+   - **SEC contact**: use `SEC_USER_AGENT` from the environment if it is set. Otherwise ask with `AskUserQuestion` (it can share one call with the model question), with these options:
+     - **Placeholder contact (Recommended)**: `tokenized-fund-research research@example.com`. Nothing personal reaches the SEC. The SEC may throttle or block a generic contact; collector B then records EDGAR as a gap.
+     - **Decline**: run without EDGAR.
+     - "Other" lets the user type their own name and email.
+
+     Without `AskUserQuestion`, ask in plain text and use the placeholder if the user gives no contact.
+     - Write the contact as one line to `<work dir>/.sec-user-agent` with the file-writing tool (not `echo`), and write `SEC_USER_AGENT: set` in `product.md`, or `SEC_USER_AGENT: set (placeholder)` for the placeholder.
      - Never put the contact in `product.md` itself: every bundle copies that file, and `build_bundles.py` stops if it finds an email there.
      - If the user declines, write `declined`. The run then goes on without EDGAR, and Appendix A says so.
    - **PDF tooling**: run `command -v pdftotext pdftoppm; python3 -c "import pypdf" 2>/dev/null && echo pypdf` once. If none is available, tell the user that `brew install poppler` (or `apt install poppler-utils`) makes prospectus reading much cheaper.
@@ -98,7 +114,7 @@ Write the choice into `product.md`. When resuming an interrupted run, reuse it r
    - Underlying fund / manager: <…>
    - Chains and main contracts: <chain: address, …>
    - Date: <YYYY-MM-DD>
-   - SEC_USER_AGENT: <set | declined — the contact itself goes in .sec-user-agent>
+   - SEC_USER_AGENT: <set | set (placeholder) | declined — the contact itself goes in .sec-user-agent>
    - PDF tooling: <pdftotext yes/no, pdftoppm yes/no, pypdf yes/no>
    - Collector models: <A=sonnet B=opus C=sonnet D=sonnet | n/a>
 
