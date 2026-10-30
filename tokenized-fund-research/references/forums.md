@@ -9,37 +9,48 @@ post quotes one you can reach.
 
 ## Forums
 
-All four run Discourse. `scripts/forum_search.py` wraps the endpoints below.
+Every forum the skill searches has its own file, `references/forums/<name>.md`. In this bundle those files follow this section, and each one says what to look for on that forum and who posts there. `forum_search.py` reads the same files and searches all of them by default. `--list-forums` prints their names, URLs and curator handles.
 
-| Forum | Base URL | What to look for |
-|---|---|---|
-| Aave | `https://governance.aave.com` | `[ARFC] Onboard <TICKER> … to Aave Horizon` threads. **Horizon launch assets** (USTB, USCC, USYC, JAAA, JTRSY, VBILL) went live without individual ARFCs or LlamaRisk asset reviews; for these, look at the Horizon launch / weekly-highlights threads and say in the report that no asset-specific review exists. Since 2026 Horizon onboarding requires a business case, a **LlamaRisk risk assessment posted as a reply inside the ARFC thread**, an Aave Labs technical assessment and a Snapshot vote. Also "Horizon Weekly Highlights", "LlamaRisk – Monthly Community Update" and Chaos Labs parameter posts. |
-| Morpho | `https://forum.morpho.org` | Curator vault whitelisting threads (Steakhouse "RWA-backed" vaults), the **Llama Risk** category, market listings that use the token as collateral. |
-| Euler | `https://forum.euler.finance` | "Integrate <TICKER> on Euler <market>" and "Accept <token> as collateral" threads, Gauntlet / Objective Labs / risk-steward posts, Securitize-market threads. |
-| Fluid | `https://gov.fluid.io` | Little RWA content so far. Search anyway and say "no threads found" if empty. |
+A forum file starts with front matter:
 
-Raw endpoints, if you need them:
+```
+---
+base_url: https://forum.example.org
+engine: discourse
+curators: LlamaRisk, steakhouse
+---
+```
+
+- `base_url`: https and the host only, no path.
+- `engine`: `discourse`, the only engine `forum_search.py` supports.
+- `curators` (optional): forum usernames that `--curators` searches with `@<username>`.
+
+To add a forum, add its file. To remove one, delete its file. Nothing else in the skill changes.
+
+`forum_search.py` wraps these Discourse endpoints. Raw endpoints, if you need them:
 - search: `<base>/search.json?q=<urlencoded>&page=<n>`. Terms must be at least 3 characters; the response has `topics`, `posts[].blurb` and `grouped_search_result.more_full_page_results`.
 - topic: `<base>/t/<id>.json`. `post_stream.stream` lists all post ids, and only about 20 are loaded.
 - more posts: `<base>/t/<id>/posts.json?post_ids[]=<id>&post_ids[]=<id>…`
 
 `forum_search.py` spaces requests to the same forum by 0.5 s and retries HTTP 429 up to 6 times.
 If you still get 429s (for example, several collectors searching at once), wait a minute and rerun
-only the forums that failed, using `--forums aave,fluid`.
+only the forums that failed, using `--forums <name>,<name>`.
 
 ## Search recipe
 
 ```bash
 # 1. ticker + issuer + product name, one query per term, merged and de-duplicated
 python3 -I scripts/forum_search.py <TICKER> "<Issuer brand>" "<Fund short name>"
-# 2. ambiguous ticker? require several terms in one query
-python3 -I scripts/forum_search.py <TICKER> Horizon --all-terms
-# 3. curator reviews: curators appear as post AUTHORS, so use Discourse's @user filter
-python3 -I scripts/forum_search.py <TICKER> @LlamaRisk --all-terms --forums aave,morpho
-python3 -I scripts/forum_search.py <TICKER> @steakhouse --all-terms --forums morpho
+# 2. ambiguous ticker? require several terms in one query (a forum file may suggest one)
+python3 -I scripts/forum_search.py <TICKER> "<Issuer brand>" --all-terms
+# 3. curator reviews: curators appear as post AUTHORS, so use Discourse's @user filter;
+#    --curators runs "<TICKER> @<username>" for every curator in each forum's file
+python3 -I scripts/forum_search.py <TICKER> --curators
 # 4. read every relevant thread in full
 python3 -I scripts/forum_search.py --thread <url> > reports/.work/<slug>/thread-<forum>-<id>.txt
 ```
+
+A curator that a forum file names in prose but not in `curators:` has no known username there; search its name as a term instead.
 
 `--thread` prints a URL for every post (`…/t/<slug>/<id>/<post_number>`); cite those, not the
 topic URL. Discourse treats a quoted multi-word term as separate words that must all match, not as
@@ -68,14 +79,15 @@ Also search for the **underlying fund or manager** (e.g. "Wellington", "Janus He
 
 ## Risk curators and reviewers
 
-| Curator | Where they publish | Notes |
+Which forums each curator posts on is in the forum files. A forum file may name curators that are not listed here.
+
+| Curator | Also publishes at | Notes |
 |---|---|---|
-| LlamaRisk | Aave (in ARFC threads; monthly updates), Morpho (Llama Risk category); `llamarisk.com/research`; GitHub `llama-risk` | Most detailed legal reviews of RWA collateral. They often had NDA access to offering documents and cite section and page numbers. |
-| Chaos Labs | Aave parameter recommendations | Market-risk parameters (caps, LTV) |
-| Steakhouse Financial | Morpho vault threads, Steakhouse research | RWA vault curation and collateral views |
-| Gauntlet | Euler, Morpho, Aave (historically) | Parameter recommendations |
-| Block Analitica, B.Protocol | Morpho, Spark | Market-risk analysis |
-| Objective Labs, Re7, MEV Capital, Sentora | Euler and Morpho vaults | Curator notes on integrations |
-| Aave Labs / Aave Chan Initiative | Aave | Technical assessments, process updates |
+| LlamaRisk | `llamarisk.com/research`; GitHub `llama-risk` | Most detailed legal reviews of RWA collateral. They often had NDA access to offering documents and cite section and page numbers. |
+| Chaos Labs | — | Market-risk parameters (caps, LTV) |
+| Steakhouse Financial | Steakhouse research | RWA vault curation and collateral views |
+| Gauntlet | — | Parameter recommendations |
+| Block Analitica, B.Protocol | Spark | Market-risk analysis |
+| Objective Labs, Re7, MEV Capital, Sentora | — | Curator notes on vault integrations |
 
 When a curator's opinion goes into the report, attribute it: "LlamaRisk recommends … [n]". Do not present it as a fact about the fund.

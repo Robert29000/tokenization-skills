@@ -29,18 +29,20 @@ Standard library only; no network access.
 """
 
 import argparse
+import glob
 import os
 import re
 import sys
 
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# letter -> (role, extra reference files appended after the sources)
+# letter -> (role, extra reference files appended after the sources; a "*" pattern adds every
+# matching file, sorted)
 COLLECTORS = {
     "A": ("Issuer docs & data", []),
     "B": ("Legal & regulatory", ["references/investor-frameworks.md", "references/roles.md"]),
     "C": ("GitHub & on-chain", []),
-    "D": ("Governance forums & curators", ["references/forums.md"]),
+    "D": ("Governance forums & curators", ["references/forums.md", "references/forums/*.md"]),
 }
 TEMPLATE = "references/collectors/prompt.md"
 RULES = "references/collectors/rules.md"
@@ -142,7 +144,14 @@ def build_bundle(letter, product_text, platform_part):
              (RULES, None, None),
              (COMMON_SOURCES, None, None),
              (platform_part[0], platform_part[1], None)]
-    parts.extend((e, None, None) for e in extras)
+    for extra in extras:
+        if "*" not in extra:
+            parts.append((extra, None, None))
+            continue
+        matches = sorted(glob.glob(os.path.join(SKILL_DIR, extra)))
+        if not matches:
+            raise BuildError(f"no files match {extra}")
+        parts.extend((os.path.relpath(m, SKILL_DIR).replace(os.sep, "/"), None, None) for m in matches)
     loaded = []
     for label, path, text in parts:
         if text is None:

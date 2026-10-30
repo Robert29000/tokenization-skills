@@ -12,6 +12,12 @@ from helpers import SKILL_DIR, load_script
 
 bb = load_script("build_bundles")
 
+
+def forum_files():
+    """The forum files collector D's bundle should hold, in file-name order."""
+    folder = os.path.join(SKILL_DIR, "references", "forums")
+    return [f"references/forums/{f}" for f in sorted(os.listdir(folder)) if f.endswith(".md")]
+
 PRODUCT = """# Midas mTBILL (mTBILL)
 
 - Platform: midas
@@ -69,7 +75,7 @@ class BuildTests(Base):
         self.assertEqual(code, 0, err)
         self.assertEqual(err, "")                      # complete product.md -> no warnings
         expected_extras = {"A": [], "B": ["references/investor-frameworks.md", "references/roles.md"],
-                           "C": [], "D": ["references/forums.md"]}
+                           "C": [], "D": ["references/forums.md"] + forum_files()}
         for letter, extras in expected_extras.items():
             bundle = self.read(f"bundle-{letter}.md")
             parts = re.findall(r"<!-- bundle part: (.+?) -->", bundle)
@@ -333,6 +339,20 @@ class SkillCopyTests(Base):
         code, _, err = self.run_main(self.work, module=module)
         self.assertEqual(code, 1)
         self.assertIn("missing file: references/forums.md", err)
+
+    def test_forum_files_are_picked_up_and_required(self):
+        dst, module = self.copy_skill()
+        folder = os.path.join(dst, "references", "forums")
+        with open(os.path.join(folder, "newdao.md"), "w", encoding="utf-8") as fh:
+            fh.write("---\nbase_url: https://gov.newdao.example\nengine: discourse\n---\n\n# NewDAO\n")
+        code, _, err = self.run_main(self.work, "--collectors", "D", module=module)
+        self.assertEqual(code, 0, err)
+        self.assertIn("<!-- bundle part: references/forums/newdao.md -->", self.read("bundle-D.md"))
+        for name in os.listdir(folder):
+            os.remove(os.path.join(folder, name))
+        code, _, err = self.run_main(self.work, "--collectors", "D", module=module)
+        self.assertEqual(code, 1)
+        self.assertIn("no files match references/forums/*.md", err)
 
     def test_unknown_placeholder_in_template(self):
         dst, module = self.copy_skill()

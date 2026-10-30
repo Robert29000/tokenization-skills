@@ -1,16 +1,20 @@
 import contextlib
 import io
 import json
+import os
 import socket
+import tempfile
 import unittest
 import urllib.error
 import urllib.parse
 from unittest import mock
 
-from helpers import (FakeOpener, FakeResponse, http_error, json_response, load_script,
-                     read_fixture)
+from helpers import (FakeOpener, FakeResponse, fixture_path, http_error, json_response,
+                     load_script, read_fixture)
 
 fs = load_script("forum_search")
+# the tests use their own forum files, so adding or removing a real forum never breaks them
+FIXTURE_FORUMS = fixture_path("forums")
 
 
 def topic(tid, title="T", last="2026-01-01T00:00:00Z", slug=None):
@@ -34,7 +38,10 @@ def on(name, needle=""):
 class Base(unittest.TestCase):
     def setUp(self):
         self.sleeps = []
-        for attr, value in (("_sleep", self.sleeps.append), ("_throttle", lambda url: None)):
+        forums, curators = fs.load_forums(FIXTURE_FORUMS)
+        for attr, value in (("_sleep", self.sleeps.append), ("_throttle", lambda url: None),
+                            ("FORUMS_DIR", FIXTURE_FORUMS), ("FORUMS", forums),
+                            ("CURATORS", curators)):
             p = mock.patch.object(fs, attr, value)
             p.start()
             self.addCleanup(p.stop)
@@ -131,7 +138,7 @@ class SearchTests(Base):
         code, out, err = self.run_main("USTB")
         self.assertEqual(code, 0)
         self.assertIn("1 result(s)", out)
-        self.assertIn("failed: morpho, euler", out)
+        self.assertIn("failed: euler, morpho", out)   # forums in file-name order
         self.assertIn("morpho", err)
         self.assertIn("timeout", err)
         self.assertEqual(len(self.sleeps), 2 * fs.RETRIES)  # retried 5xx and timeout
@@ -258,7 +265,7 @@ class HttpTests(Base):
         self.assertEqual(len(opener.calls), 1)
 
 
-class ThreadRefTests(unittest.TestCase):
+class ThreadRefTests(Base):
     def test_accepted_forms(self):
         cases = {
             "https://governance.aave.com/t/arfc-onboard-mwin/25536": ("aave", 25536),
@@ -398,6 +405,119 @@ class HtmlToTextTests(unittest.TestCase):
         text = fs.html_to_text("<p>Unclosed <b>bold <a href='/t/1'>link", self.BASE)
         self.assertIn("Unclosed bold link", text)
         self.assertEqual(fs.html_to_text("<p>&amp; &lt;tag&gt; &#8364;</p>"), "& <tag> €")
+
+
+def front(base_url="https://forum.example.org", engine="discourse", extra=""):
+    return f"---\nbase_url: {base_url}\nengine: {engine}\n{extra}---\n\n# Forum\n"
+
+
+class ForumFileTests(Base):
+    def write_forums(self, files):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        folder = tmp.name
+        for name, text in files.items():
+            with open(os.path.join(folder, name), "w", encoding="utf-8") as fh:
+                fh.write(text)
+        return folder
+
+    def test_real_forum_files_load(self):
+        forums, curators = fs.load_forums(os.path.join(fs.SKILL_DIR, "references", "forums"))
+        self.assertTrue(forums)
+        self.assertEqual(set(forums), set(curators))
+        for name, base in forums.items():
+            self.assertRegex(base, r"^https://[a-z0-9.-]+$", name)
+
+    def test_fixture_forums_load(self):
+        forums, curators = fs.load_forums(FIXTURE_FORUMS)
+        self.assertEqual(list(forums), ["aave", "euler", "fluid", "morpho"])
+        self.assertEqual(forums["aave"], "https://governance.aave.com")
+        self.assertEqual(curators["morpho"], ["LlamaRisk", "steakhouse"])
+        self.assertEqual(curators["euler"], [])
+
+    def test_base_url_and_curators_normalised(self):
+        folder = self.write_forums({"x.md": front("https://Forum.Example.org/",
+                                                  extra="curators: @Alice, bob.k , Alice\n"),
+                                    "README.txt": "not a forum file"})
+        forums, curators = fs.load_forums(folder)
+        self.assertEqual(forums, {"x": "https://forum.example.org"})
+        self.assertEqual(curators, {"x": ["Alice", "bob.k"]})
+
+    def test_invalid_forum_files_rejected(self):
+        cases = {
+            "no front matter": ({"x.md": "# Forum\n"}, "no front matter"),
+            "unknown key": ({"x.md": front(extra="default: true\n")}, "unknown front-matter line"),
+            "repeated key": ({"x.md": front(extra="engine: discourse\n")}, "given twice"),
+            "http": ({"x.md": front("http://forum.example.org")}, "base_url"),
+            "path": ({"x.md": front("https://example.org/forum")}, "base_url"),
+            "port": ({"x.md": front("https://forum.example.org:8443")}, "base_url"),
+            "no base_url": ({"x.md": "---\nengine: discourse\n---\n"}, "base_url"),
+            "engine": ({"x.md": front(engine="flarum")}, "not supported"),
+            "no engine": ({"x.md": "---\nbase_url: https://f.example.org\n---\n"}, "not supported"),
+            "curator": ({"x.md": front(extra="curators: Llama Risk\n")}, "usernames"),
+            "file name": ({"Bad_Name.md": front()}, "file name"),
+            "same host": ({"a.md": front("https://forum.example.org"),
+                           "b.md": front("https://www.forum.example.org")}, "already the forum 'a'"),
+            "empty": ({}, "no forum files"),
+        }
+        for label, (files, needle) in cases.items():
+            with self.subTest(label), self.assertRaises(ValueError) as ctx:
+                fs.load_forums(self.write_forums(files))
+            self.assertIn(needle, str(ctx.exception), label)
+
+    def test_invalid_forum_files_exit_1(self):
+        folder = self.write_forums({"x.md": front(engine="flarum")})
+        with mock.patch.object(fs, "FORUMS_DIR", folder):
+            code, _, err = self.run_main("USTB")
+        self.assertEqual(code, 1)
+        self.assertIn("references/forums/x.md", err)
+
+    def test_new_forum_file_is_searched_and_threads_resolve(self):
+        folder = self.write_forums({"newdao.md": front("https://gov.newdao.example")})
+        opener = self.use(FakeOpener([(lambda u: True, json_response(search_page([topic(1)])))]))
+        with mock.patch.object(fs, "FORUMS_DIR", folder):
+            code, out, _ = self.run_main("USTB")
+        self.assertEqual(code, 0)
+        self.assertTrue(opener.urls()[0].startswith("https://gov.newdao.example/search.json"))
+        self.assertIn("https://gov.newdao.example/t/topic-1/1", out)
+        self.assertEqual(fs.parse_thread_ref("https://www.gov.newdao.example/t/x/5"), ("newdao", 5))
+
+    def test_list_forums(self):
+        code, out, _ = self.run_main("--list-forums")
+        self.assertEqual(code, 0)
+        self.assertIn("aave | https://governance.aave.com | curators: LlamaRisk", out)
+        self.assertIn("euler | https://forum.euler.finance | curators: -", out)
+        code, out, _ = self.run_main("--list-forums", "--json")
+        self.assertEqual([r["forum"] for r in json.loads(out)], ["aave", "euler", "fluid", "morpho"])
+        code, _, _ = self.run_main("--list-forums", "USTB")
+        self.assertEqual(code, 2)
+
+
+class CuratorTests(Base):
+    def test_one_query_per_curator_and_forums_without_curators_skipped(self):
+        opener = self.use(FakeOpener([(lambda u: True, json_response(search_page([])))]))
+        code, out, err = self.run_main("JAAA", "--curators", "--json")
+        self.assertEqual(code, 0, err)
+        queries = sorted((urllib.parse.urlparse(u).netloc,
+                          urllib.parse.parse_qs(urllib.parse.urlparse(u).query)["q"][0])
+                         for u in opener.urls())
+        self.assertEqual(queries, [("forum.morpho.org", "JAAA @LlamaRisk"),
+                                   ("forum.morpho.org", "JAAA @steakhouse"),
+                                   ("governance.aave.com", "JAAA @LlamaRisk")])
+        data = json.loads(out)
+        self.assertEqual(data["forums_skipped"], ["euler", "fluid"])
+        self.assertEqual(data["forums_failed"], [])
+        self.assertIn("no curators listed for euler, fluid", err)
+
+    def test_no_curators_in_selected_forums_exit_2(self):
+        code, _, err = self.run_main("JAAA", "--curators", "--forums", "euler,fluid")
+        self.assertEqual(code, 2)
+        self.assertIn("lists a curator", err)
+
+    def test_curators_with_several_terms(self):
+        self.assertEqual(fs.forum_queries(["JAAA", "Janus Henderson"], "aave", False, True),
+                         ['JAAA "Janus Henderson" @LlamaRisk'])
+        self.assertEqual(fs.forum_queries(["JAAA"], "euler", False, True), [])
 
 
 if __name__ == "__main__":

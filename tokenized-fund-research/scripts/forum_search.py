@@ -1,26 +1,32 @@
 #!/usr/bin/env python3
-"""Search DeFi lending-protocol governance forums (Discourse) and dump threads as text.
+"""Search governance forums (Discourse) and dump threads as text.
+
+The forums are the files in references/forums/: one <name>.md per forum, starting with
+front matter (base_url, engine, optional curators). Add a file to add a forum; nothing here
+changes.
+
+  python3 -I forum_search.py --list-forums                  # names, URLs, curator handles
 
 Search (each term is searched separately; results are merged and de-duplicated):
   python3 -I forum_search.py mTBILL "Midas"                 # all forums
-  python3 -I forum_search.py USTB --forums aave,morpho
+  python3 -I forum_search.py USTB --forums <name>,<name>
   python3 -I forum_search.py OUSG Ondo --all-terms          # one query requiring all terms
+  python3 -I forum_search.py JAAA --curators                # "JAAA @<handle>" per forum curator
   python3 -I forum_search.py JAAA --max-pages 3 --json
 
 Read one thread (all posts, HTML converted to text):
-  python3 -I forum_search.py --thread https://governance.aave.com/t/some-slug/25536
-  python3 -I forum_search.py --thread 25536 --forum aave
-
-Forums: aave (governance.aave.com), morpho (forum.morpho.org),
-        euler (forum.euler.finance), fluid (gov.fluid.io)
+  python3 -I forum_search.py --thread https://<forum host>/t/some-slug/25536
+  python3 -I forum_search.py --thread 25536 --forum <name>
 
 Exit code: 0 = success (including "0 results"), 1 = every forum failed / thread not
-retrievable, 2 = bad arguments. Standard library only; honours HTTPS_PROXY.
+retrievable / a forum file is invalid, 2 = bad arguments. Standard library only; honours
+HTTPS_PROXY.
 """
 
 import argparse
 import html
 import json
+import os
 import re
 import socket
 import sys
@@ -30,12 +36,15 @@ import urllib.parse
 import urllib.request
 from html.parser import HTMLParser
 
-FORUMS = {
-    "aave": "https://governance.aave.com",
-    "morpho": "https://forum.morpho.org",
-    "euler": "https://forum.euler.finance",
-    "fluid": "https://gov.fluid.io",
-}
+SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FORUMS_DIR = os.path.join(SKILL_DIR, "references", "forums")
+FORUMS = {}    # name -> base URL, filled from FORUMS_DIR by use_forums()
+CURATORS = {}  # name -> curator usernames to search with @<handle>
+FRONT_KEYS = {"base_url", "engine", "curators"}
+ENGINES = {"discourse"}
+FRONT_RE = re.compile(r"\A---\n(.*?)\n---(?:\n|\Z)", re.S)
+NAME_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
+HANDLE_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*\Z")
 USER_AGENT = "tokenized-fund-research/1.0 (+governance forum reader)"
 TIMEOUT = 20
 RETRIES = 3            # retries for 5xx / timeouts / network errors
@@ -52,6 +61,73 @@ CONTROL_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]
 
 _sleep = time.sleep    # patched in tests
 _last_request = {}     # host -> monotonic time of the last request
+
+
+def load_forums(folder):
+    """Read <folder>/<name>.md forum files. Returns (forums, curators); raises ValueError."""
+    try:
+        files = sorted(f for f in os.listdir(folder) if f.endswith(".md") and not f.startswith("."))
+    except OSError as e:
+        raise ValueError(f"cannot read the forum folder {folder}: {e}")
+    if not files:
+        raise ValueError(f"no forum files (<name>.md) in {folder}")
+    forums, curators, hosts = {}, {}, {}
+    for fname in files:
+        name, label = fname[:-3], f"references/forums/{fname}"
+        if not NAME_RE.match(name):
+            raise ValueError(f"{label}: the file name must be lowercase letters, digits and dashes")
+        try:
+            with open(os.path.join(folder, fname), encoding="utf-8") as fh:
+                text = fh.read().replace("\r\n", "\n")
+        except (OSError, UnicodeDecodeError) as e:
+            raise ValueError(f"cannot read {label}: {e}")
+        m = FRONT_RE.match(text)
+        if not m:
+            raise ValueError(f"{label}: no front matter (a '---' block) at the top")
+        meta = {}
+        for line in m.group(1).split("\n"):
+            if not line.strip():
+                continue
+            key, sep, value = line.partition(":")
+            key = key.strip()
+            if not sep or key not in FRONT_KEYS:
+                raise ValueError(f"{label}: unknown front-matter line '{line.strip()}' "
+                                 f"(keys: {', '.join(sorted(FRONT_KEYS))})")
+            if key in meta:
+                raise ValueError(f"{label}: '{key}' is given twice")
+            meta[key] = value.strip()
+        base = (meta.get("base_url") or "").rstrip("/")
+        url = urllib.parse.urlparse(base)
+        if (url.scheme != "https" or not url.hostname or url.path or url.params or url.query
+                or url.fragment or url.username or url.port):
+            raise ValueError(f"{label}: base_url must be https://<host> with no path, e.g. "
+                             "https://forum.example.org")
+        engine = meta.get("engine", "")
+        if engine not in ENGINES:
+            raise ValueError(f"{label}: engine '{engine}' is not supported "
+                             f"(supported: {', '.join(sorted(ENGINES))})")
+        handles = [h.strip().lstrip("@") for h in meta.get("curators", "").split(",") if h.strip()]
+        bad = [h for h in handles if not HANDLE_RE.match(h)]
+        if bad:
+            raise ValueError(f"{label}: curators must be forum usernames, got {bad}")
+        host = _host(base)
+        if host in hosts:
+            raise ValueError(f"{label}: {host} is already the forum '{hosts[host]}'")
+        hosts[host] = name
+        forums[name] = f"https://{url.hostname}"
+        curators[name] = list(dict.fromkeys(handles))
+    return forums, curators
+
+
+def use_forums(folder=None):
+    """Load the forum files into FORUMS and CURATORS. Raises ValueError."""
+    global FORUMS, CURATORS
+    FORUMS, CURATORS = load_forums(folder or FORUMS_DIR)
+
+
+def _host(url):
+    host = (urllib.parse.urlparse(url).hostname or "").lower()
+    return host[4:] if host.startswith("www.") else host
 
 
 class FetchError(Exception):
@@ -240,13 +316,21 @@ def _clean_blurb(text):
     return clean_text(re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", "", text or "")))).strip()[:240]
 
 
-def run_search(terms, forums, all_terms, max_pages):
-    """Return (results, errors). results de-duplicated by (forum, topic_id)."""
-    queries = build_query(terms, all_terms)
+def forum_queries(terms, forum, all_terms, curators=False):
+    """Queries for one forum; with curators, one "<terms> @<handle>" query per curator."""
+    if curators:
+        return [build_query(list(terms) + [f"@{h}"], True)[0] for h in CURATORS.get(forum, [])]
+    return build_query(terms, all_terms)
+
+
+def run_search(terms, forums, all_terms, max_pages, curators=False):
+    """Return (results, errors, forum_ok). results de-duplicated by (forum, topic_id).
+    With curators, a forum whose file lists no curator is not searched and not in forum_ok."""
     results, errors = {}, []
-    forum_ok = {f: False for f in forums}
-    for forum in forums:
-        for q in queries:
+    plan = {f: forum_queries(terms, f, all_terms, curators) for f in forums}
+    forum_ok = {f: False for f in forums if plan[f]}
+    for forum in forum_ok:
+        for q in plan[forum]:
             try:
                 found = search_forum(forum, q, max_pages)
             except FetchError as e:
@@ -281,12 +365,12 @@ def parse_thread_ref(ref, forum=None):
         return _check_forum(forum), int(ref)
     parsed = urllib.parse.urlparse(ref if "://" in ref or ref.startswith("/") else "https://" + ref)
     if parsed.netloc:
-        host = parsed.netloc.lower().split(":")[0]
-        host = host[4:] if host.startswith("www.") else host
-        matches = [n for n, b in FORUMS.items() if urllib.parse.urlparse(b).netloc == host]
+        host = _host(parsed.geturl())
+        matches = [n for n, b in FORUMS.items() if _host(b) == host]
         if not matches:
             raise ValueError(f"unknown forum host '{host}' (known: "
-                             + ", ".join(urllib.parse.urlparse(b).netloc for b in FORUMS.values()) + ")")
+                             + ", ".join(_host(b) for b in FORUMS.values())
+                             + "; add a file to references/forums/ to search another forum)")
         name = matches[0]
         if forum and _check_forum(forum) != name:
             raise ValueError(f"--forum {forum} contradicts the URL host {host}")
@@ -479,16 +563,37 @@ def parse_forums(value):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(
-        description="Search Aave / Morpho / Euler / Fluid governance forums or dump a thread.")
+        description="Search the governance forums in references/forums/ or dump a thread.")
     ap.add_argument("terms", nargs="*", help="search terms (ticker, issuer, product name)")
-    ap.add_argument("--forums", default=",".join(FORUMS), help="comma list (default: all)")
+    ap.add_argument("--forums", help="comma list of forum names (default: all)")
     ap.add_argument("--all-terms", action="store_true",
                     help="one query that must match all terms (default: one query per term)")
+    ap.add_argument("--curators", action="store_true",
+                    help="one query per curator in each forum's file: all terms plus @<curator>")
+    ap.add_argument("--list-forums", action="store_true",
+                    help="print the forums, their URLs and curator handles, then exit")
     ap.add_argument("--max-pages", type=int, default=2, help="result pages per query (default 2)")
     ap.add_argument("--thread", help="topic URL, /t/... path or numeric id (with --forum)")
     ap.add_argument("--forum", help="forum name for --thread with a bare id or path")
     ap.add_argument("--json", action="store_true", help="JSON output")
     args = ap.parse_args(argv)
+    try:
+        use_forums()
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+
+    if args.list_forums:
+        if args.terms or args.thread:
+            print("error: --list-forums takes no search terms or --thread", file=sys.stderr)
+            return 2
+        rows = [{"forum": n, "base_url": b, "curators": CURATORS[n]} for n, b in FORUMS.items()]
+        if args.json:
+            print(json.dumps(rows, indent=2))
+        else:
+            for r in rows:
+                print(f"{r['forum']} | {r['base_url']} | curators: {', '.join(r['curators']) or '-'}")
+        return 0
 
     if args.thread:
         if args.terms:
@@ -518,12 +623,19 @@ def main(argv=None):
         print(f"error: {msg}", file=sys.stderr)
         return 2
     try:
-        forums = parse_forums(args.forums)
+        forums = parse_forums(args.forums) if args.forums is not None else list(FORUMS)
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
+    skipped = [f for f in forums if not forum_queries(args.terms, f, args.all_terms, args.curators)]
+    if len(skipped) == len(forums):
+        print("error: none of the selected forums lists a curator in its file", file=sys.stderr)
+        return 2
+    if skipped:
+        print(f"note: no curators listed for {', '.join(skipped)}; not searched", file=sys.stderr)
 
-    results, errors, forum_ok = run_search(args.terms, forums, args.all_terms, args.max_pages)
+    results, errors, forum_ok = run_search(args.terms, forums, args.all_terms, args.max_pages,
+                                           args.curators)
     for e in errors:
         print(f"warning: {e['forum']} [{e['query']}]: {e['kind']}: {e['error']}", file=sys.stderr)
     all_failed = not any(forum_ok.values())
@@ -531,7 +643,8 @@ def main(argv=None):
     if args.json:
         print(json.dumps({"results": results, "errors": errors,
                           "forums_ok": [f for f, ok in forum_ok.items() if ok],
-                          "forums_failed": [f for f, ok in forum_ok.items() if not ok]},
+                          "forums_failed": [f for f, ok in forum_ok.items() if not ok],
+                          "forums_skipped": skipped},
                          indent=2, ensure_ascii=False))
     else:
         if all_failed:

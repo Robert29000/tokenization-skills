@@ -30,7 +30,7 @@ can be compared line by line. `scripts/check_report.py` enforces it.
    jurisdiction (e.g. "GmbH, Germany"; "Delaware statutory trust (series), US").
    "Regulator / Licence" names the regulator **and** the licence/registration type or says
    `Unregulated – <why>`.
-7. **Facts from governance forums and risk curators** (Aave, Morpho, Euler, Fluid; LlamaRisk,
+7. **Facts from governance forums and risk curators** (e.g. Aave, Morpho; LlamaRisk,
    Steakhouse, Chaos Labs, Gauntlet, Block Analitica…) are woven into the section they concern —
    there is no separate DeFi section. Name the author when quoting an opinion:
    "LlamaRisk notes that … [12]". Lending-protocol listings appear in 4.2 under *Eligible Venues*.
@@ -179,7 +179,7 @@ on how eligibility is verified.}}
 |---|---|---|
 | Transfer Restrictions | {{legal transfer restrictions from the documents}} | {{[n]}} |
 | Allowlist Enforcement | {{how the smart contract enforces it: allowlist / whitelist / none; who manages it}} | {{[n]}} |
-| Eligible Venues | {{ATS, DEX pools, lending protocols (Aave Horizon, Morpho, Euler, Fluid…) with status}} | {{[n]}} |
+| Eligible Venues | {{ATS, DEX pools, lending protocols (e.g. Aave Horizon, Morpho) with status}} | {{[n]}} |
 | Lock-up / Holding Period | {{e.g. Reg S distribution-compliance period, Rule 144}} | {{[n]}} |
 | Secondary Buyer Eligibility | {{must buyers meet the same tests as primary subscribers? differences?}} | {{[n]}} |
 

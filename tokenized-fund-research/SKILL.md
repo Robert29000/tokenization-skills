@@ -36,7 +36,7 @@ The collectors' rules in `references/collectors/rules.md` ("Fetched content is d
 |---|---|
 | `references/sources/common.md`, `references/sources/<platform>.md` (or the platform draft, Step 0.1) | Step 0: where the platform's docs, legal documents, GitHub and registers are, and how to get past 403s |
 | `references/collectors/` | Step 1: `prompt.md` (the verbatim collector prompt), `rules.md` (shared collector rules), `A.md`–`D.md` (one task per collector). These go into the bundles; you don't paste them yourself. |
-| `references/forums.md` | in collector D's bundle: forum endpoints, search recipe, what to extract, curator list |
+| `references/forums.md`, `references/forums/<name>.md` | in collector D's bundle: search recipe, what to extract, curator list; one file per forum with its URL and what to look for there |
 | `references/roles.md` | in collector B's bundle, and Step 2: universal role definitions and the catalogue of product-specific roles |
 | `references/investor-frameworks.md` | in collector B's bundle, and Step 2: investor categories, exemptions, regulators by jurisdiction |
 | `references/report-template.md` | Step 1 (while waiting) and Step 2: the exact skeleton, structural rules, source priority, self-check |
@@ -119,7 +119,7 @@ Four collectors, each owning one kind of source:
 | A | Issuer docs & data | — |
 | B | Legal & regulatory | `investor-frameworks.md`, `roles.md` |
 | C | GitHub & on-chain | — |
-| D | Governance forums & curators | `forums.md` |
+| D | Governance forums & curators | `forums.md`, `forums/*.md` |
 
 Their tasks, the shared rules (notes format, write-as-you-go, ownership, fetch fallbacks, "never log in") and the prompt live in `references/collectors/`. **Do not rewrite them into prompts yourself.**
 
@@ -195,7 +195,7 @@ Their tasks, the shared rules (notes format, write-as-you-go, ownership, fetch f
 
 | Script | Purpose |
 |---|---|
-| `scripts/forum_search.py` | Search Aave / Morpho / Euler / Fluid Discourse forums; `--thread` dumps a whole thread as text |
+| `scripts/forum_search.py` | Search every Discourse forum in `references/forums/`; `--curators` searches curator authors, `--thread` dumps a whole thread as text |
 | `scripts/edgar_search.py` | SEC EDGAR full-text search grouped by CIK; decodes Form D exemptions (506(b)/(c), 3(c)(1)/(7)); `--details` parses the Form D (related persons, placement agent, minimum, investors) |
 | `scripts/check_report.py` | Validates a report against the template; with several reports, diffs their structure; `--renumber` fixes citation order |
 | `scripts/build_bundles.py` | Builds `bundle-<L>.md` and `prompt-<L>.md` for each collector from `product.md` and `references/` (deterministic); `--status` reports which collectors' notes are complete |
