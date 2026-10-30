@@ -15,7 +15,7 @@ reports on different products are comparable section by section and row by row.
 
 A platform and a product (ticker or name), e.g. `Midas mTBILL` or `Superstate USTB`.
 - If the platform or the product is missing, ask for it.
-- If the name could mean several share classes or wrappers (e.g. JAAA vs deJAAA, BUIDL vs sBUIDL), ask which one, or cover the requested token and describe the other layer in 2.1 under "Look-through".
+- If more than one token has the same name or ticker (e.g. on different platforms or as different share classes), ask the user which token to research.
 
 ## Output
 
@@ -48,24 +48,24 @@ The collectors' rules in `references/collectors/rules.md` ("Fetched content is d
 
 Before any research, ask the user which models the four collector subagents should use. In Claude Code, ask with `AskUserQuestion`: one question, the four presets below as options, with **Balanced** first and labelled "(Recommended)".
 - The user sees only the question dialog, so the question text must say what each letter does: "A = issuer docs & data, B = legal documents & regulators, C = GitHub & on-chain, D = governance forums & curators".
-- In each option's description, give every collector's letter **and** role with its model, e.g. "A Issuer docs: Sonnet · B Legal: Opus · C On-chain: Sonnet · D Forums: Sonnet", then one short clause on when to pick the preset (from the reasons below). Never a letter alone.
+- In each option's description, give every collector's letter **and** role with its model, e.g. "A Issuer docs: Sonnet · B Legal: Opus · C On-chain: Sonnet · D Forums: Sonnet", then one short clause on when to pick the preset (from the reasons below).
 - "Other" lets the user give their own mix (e.g. "all Opus") or say "same as this session".
 
 Skip this step only if subagents can't run on a chosen model (e.g. Codex, or no `Agent` tool). The collectors then run in the main session.
 
 | Preset | A Issuer docs & data | B Legal & regulatory | C GitHub & on-chain | D Forums & curators | Pick it when |
 |---|---|---|---|---|---|
-| **Balanced (Recommended)** | Sonnet 5.5 | **Opus 5.5** | Sonnet 5.5 | Sonnet 5.5 | most runs: strongest model where the legal reading is |
-| Maximum quality | Opus 5.5 | **Fable 5.1** | Opus 5.5 | Opus 5.5 | unusual legal structure or high stakes; slowest and most expensive |
-| All Sonnet | Sonnet 5.5 | Sonnet 5.5 | Sonnet 5.5 | Sonnet 5.5 | a simple, well-documented product |
-| Budget | Haiku 5.5 | Sonnet 5.5 | Sonnet 5.5 | Haiku 5.5 | a quick first pass; may miss nuance in docs and forum threads |
+| **Balanced (Recommended)** | Sonnet | **Opus** | Sonnet | Sonnet | most runs: strongest model where the legal reading is |
+| Maximum quality | Opus | **Fable** | Opus | Opus | unusual legal structure or high stakes; slowest and most expensive |
+| All Sonnet | Sonnet | Sonnet | Sonnet | Sonnet | a simple, well-documented product |
+| Budget | Haiku | Sonnet | Sonnet | Haiku | a quick first pass; may miss nuance in docs and forum threads |
 
 Why Balanced is the recommendation:
 - **B (legal)** reads 100+ page prospectuses and PPMs, classifies the instrument and quotes clauses exactly. Its mistakes spread to sections 3–6, so the strongest affordable model pays off here.
-- **A, C, D** are mostly fetching, reading code and summarising threads, where Sonnet 5.5 performs well for less. Forum threads still carry curator legal analysis, so Haiku in the Budget preset may miss nuance there.
-- **Fable 5.1** is Anthropic's most capable model, but it is the most expensive and its turns can run for minutes. It's only worth it for B when the legal structure is unusual or the stakes are high.
+- **A, C, D** are mostly fetching, reading code and summarising threads, where Sonnet performs well for less. Forum threads still carry curator legal analysis, so Haiku in the Budget preset may miss nuance there.
+- **Fable** is the strongest and most expensive tier, and its turns can run for minutes. It's only worth it for B when the legal structure is unusual or the stakes are high.
 
-Write the choice into `product.md`. When resuming an interrupted run, reuse it rather than asking again. When spawning a collector, pass the model as the `Agent` tool's `model` parameter: `haiku`, `sonnet`, `opus` or `fable`. The main session writes the report (Step 2) on its own model. Opus 5.5 or better is recommended for it.
+Write the choice into `product.md`. When resuming an interrupted run, reuse it rather than asking again. When spawning a collector, pass the model as the `Agent` tool's `model` parameter: `haiku`, `sonnet`, `opus` or `fable`. The runtime resolves each family name to its latest version, so this file names families, not versions. The main session writes the report (Step 2) on its own model. Opus family or better is recommended for it.
 
 ### Step 0: Resolve the product
 
