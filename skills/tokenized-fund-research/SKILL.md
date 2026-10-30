@@ -196,7 +196,7 @@ Their tasks, the shared rules (notes format, write-as-you-go, ownership, fetch f
 | Script | Purpose |
 |---|---|
 | `scripts/forum_search.py` | Search every Discourse forum in `references/forums/`; `--curators` searches curator authors, `--thread` dumps a whole thread as text |
-| `scripts/edgar_search.py` | SEC EDGAR full-text search grouped by CIK; decodes Form D exemptions (506(b)/(c), 3(c)(1)/(7)); `--details` parses the Form D (related persons, placement agent, minimum, investors) |
+| `scripts/edgar_search.py` | SEC EDGAR full-text search grouped by CIK; decodes Form D exemptions (506(b)/(c), 3(c)(1)/(7)); `--details` parses the Form D (related persons, placement agent, minimum, investors); `--submissions <CIK>` reads one entity's EDGAR record (SEC file numbers, former names, filings) |
 | `scripts/check_report.py` | Validates a report against the template; with several reports, diffs their structure; `--renumber` fixes citation order |
 | `scripts/build_bundles.py` | Builds `bundle-<L>.md` and `prompt-<L>.md` for each collector from `product.md` and `references/` (deterministic); `--status` reports which collectors' notes are complete |
 

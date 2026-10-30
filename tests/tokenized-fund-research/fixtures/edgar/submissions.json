@@ -1,0 +1,22 @@
+{
+  "cik": "0000205021",
+  "entityType": "other",
+  "name": "EXAMPLE   DISTRIBUTORS, INC.",
+  "stateOfIncorporation": "DE",
+  "addresses": {"business": {"city": "HOUSTON", "stateOrCountry": "TX"}},
+  "formerNames": [
+    {"name": "EXAMPLE AIM DISTRIBUTORS, INC.", "from": "2009-02-27T00:00:00.000Z", "to": "2010-04-05T00:00:00.000Z"},
+    {"name": "A I M  DISTRIBUTORS INC          /BD", "from": "2002-02-28T00:00:00.000Z", "to": "2002-02-28T00:00:00.000Z"},
+    "not an object"
+  ],
+  "filings": {
+    "recent": {
+      "accessionNumber": ["0000205021-26-000001", "0000205021-25-000003", "0000205021-25-000002", "0001193125-20-000001", "0000205021-24-000009"],
+      "filingDate": ["2026-02-26", "2025-02-27", "2025-01-10", "2020-12-07", "2024-03-01"],
+      "form": ["X-17A-5", "X-17A-5", "X-17A-5/A", "40-APP", "FOCUSN"],
+      "fileNumber": ["008-21323", "008-21323", "008-21323", "812-15182-01", ""],
+      "primaryDocument": ["xslX-17A-5_X01/primary_doc.xml", "primary_doc.xml", "primary_doc.xml", "app.htm", ""]
+    },
+    "files": [{"name": "CIK0000205021-submissions-001.json"}]
+  }
+}

@@ -370,5 +370,92 @@ class HttpTests(Base):
         self.assertAlmostEqual(self.sleeps[0], ed.MIN_INTERVAL - 0.05)
 
 
+class SubmissionsTests(Base):
+    def test_parse_cik(self):
+        for value in ("205021", "0000205021", "CIK205021", " cik0000205021 "):
+            self.assertEqual(ed.parse_cik(value), "0000205021", value)
+        for value in ("", "0", "abc", "12345678901", "205021x", "-5"):
+            with self.assertRaises(ValueError, msg=value):
+                ed.parse_cik(value)
+
+    def test_summary_file_numbers_names_and_urls(self):
+        r = ed.summarise_submissions(fixture("submissions.json"), "0000205021")
+        self.assertEqual(r["name"], "EXAMPLE DISTRIBUTORS, INC.")            # whitespace collapsed
+        self.assertEqual(r["state_of_incorporation"], "Delaware")
+        self.assertEqual(r["business_address"], "HOUSTON, TX")
+        self.assertEqual([f["name"] for f in r["former_names"]],
+                         ["EXAMPLE AIM DISTRIBUTORS, INC.", "A I M DISTRIBUTORS INC /BD"])
+        self.assertEqual(r["former_names"][0]["from"], "2009-02-27")
+        bd, app = r["file_numbers"]                                          # newest first
+        self.assertEqual((bd["file_number"], bd["kind"], bd["filings"], bd["latest"]),
+                         ("008-21323", "broker-dealer", 3, "2026-02-26"))   # zero-padded prefix
+        self.assertEqual(bd["forms"], ["X-17A-5", "X-17A-5/A"])
+        self.assertEqual(app["kind"], "exemptive application")
+        self.assertEqual([f["file_date"] for f in r["filings"]],
+                         ["2026-02-26", "2025-02-27", "2025-01-10", "2024-03-01", "2020-12-07"])
+        self.assertEqual(r["filings"][0]["url"], "https://www.sec.gov/Archives/edgar/data/205021/"
+                         "000020502126000001/xslX-17A-5_X01/primary_doc.xml")
+        self.assertIsNone(r["filings"][3]["url"])                            # no primary document
+        self.assertEqual(r["older_filing_files"], 1)
+
+    def test_forms_and_dates_filter_listed_filings_only(self):
+        data = fixture("submissions.json")
+        r = ed.summarise_submissions(data, "0000205021", ["X-17A-5"], "2025-02-01")
+        self.assertEqual([(f["file_date"], f["form"]) for f in r["filings"]],
+                         [("2026-02-26", "X-17A-5"), ("2025-02-27", "X-17A-5")])
+        r = ed.summarise_submissions(data, "0000205021", ["X-17A-5"], date_to="2025-01-31")
+        self.assertEqual([f["form"] for f in r["filings"]], ["X-17A-5/A"])   # amendments match too
+        self.assertEqual(len(r["file_numbers"]), 2)                          # file numbers unfiltered
+
+    def test_bad_shapes_do_not_crash(self):
+        for data in ({"name": "X"}, {"name": "X", "filings": {"recent": {"form": "D"}}},
+                     {"name": "X\x1b[31m", "filings": {"recent": {
+                         "accessionNumber": ["a", "b"], "filingDate": ["2026-01-01"], "form": ["D", "D"],
+                         "fileNumber": ["021-1", "021-2"], "primaryDocument": ["x", "y"]}}}):
+            r = ed.summarise_submissions(data, "0000000001")
+            self.assertLessEqual(len(r["filings"]), 1)
+            self.assertNotIn("\x1b", r["name"])
+
+    def test_cli_text_requests_padded_cik(self):
+        opener = self.use(FakeOpener([(lambda u: "data.sec.gov" in u,
+                                       json_response(fixture("submissions.json")))]))
+        code, out, err = self.run_main("--submissions", "205021", "--max-results", "2")
+        self.assertEqual(code, 0, err)
+        url, headers = opener.calls[0]
+        self.assertEqual(url, "https://data.sec.gov/submissions/CIK0000205021.json")
+        self.assertEqual(headers.get("User-agent"), UA)
+        self.assertIn("CIK 0000205021 — EXAMPLE DISTRIBUTORS, INC.", out)
+        self.assertIn("008-21323       broker-dealer — X-17A-5, X-17A-5/A; 3 filing(s)", out)
+        self.assertIn("2 of 5 recent filing(s):", out)
+        self.assertIn("1 older filing file(s)", out)
+
+    def test_cli_json_limits_filings(self):
+        self.use(FakeOpener([(lambda u: True, json_response(fixture("submissions.json")))]))
+        code, out, _ = self.run_main("--submissions", "205021", "--forms", "X-17A-5", "--json",
+                                     "--max-results", "1")
+        self.assertEqual(code, 0)
+        data = json.loads(out)
+        self.assertEqual([f["form"] for f in data["filings"]], ["X-17A-5"])
+        self.assertEqual(data["file_numbers"][0]["file_number"], "008-21323")
+
+    def test_unknown_cik_and_empty_record_exit_1(self):
+        self.use(FakeOpener([(lambda u: True, http_error("u", 404))]))
+        code, _, err = self.run_main("--submissions", "9999999999")
+        self.assertEqual(code, 1)
+        self.assertIn("no EDGAR record for CIK 9999999999", err)
+        self.use(FakeOpener([(lambda u: True, json_response({"cik": "1"}))]))
+        code, _, err = self.run_main("--submissions", "1")
+        self.assertEqual(code, 1)
+        self.assertIn("no EDGAR record", err)
+
+    def test_bad_combinations_exit_2_without_request(self):
+        opener = self.use(FakeOpener([]))
+        for argv in (["X", "--submissions", "1"], ["--submissions", "1", "--details"],
+                     ["--submissions", "1", "--raw"], ["--submissions", "x1"], []):
+            code, _, _ = self.run_main(*argv)
+            self.assertEqual(code, 2, argv)
+        self.assertEqual(opener.calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()

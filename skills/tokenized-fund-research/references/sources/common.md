@@ -55,7 +55,7 @@ primary source, trust the primary source and record the change in Appendix A.
 |---|---|---|
 | SEC (US) | EDGAR; transfer-agent registrations via Form TA | fund filings, transfer-agent status |
 | SEC IAPD (US) | `https://adviserinfo.sec.gov` | registered investment advisers (Form ADV) |
-| FINRA (US) | `https://brokercheck.finra.org` | broker-dealer / ATS status. Both IAPD and BrokerCheck sit behind Cloudflare (a 307 challenge) for scripts; use the CRD number from the Form D (`--details`) together with search snippets |
+| FINRA (US) | `https://brokercheck.finra.org` | broker-dealer / ATS status. Both IAPD and BrokerCheck sit behind Cloudflare (a 307 challenge) for scripts. Use EDGAR as the official mirror: `edgar_search.py --submissions <CIK>` gives the firm's legal name, state, former names, filings and the SEC file numbers on them, and counts as [P]. A broker-dealer's 8- number shows on its X-17A-5 filings; an adviser's Form ADV is not on EDGAR, so its 801- number usually doesn't show. Find the CIK with a name search (`edgar_search.py "<firm>"`). CRD numbers from third-party sites are [S] |
 | FMA (Liechtenstein) | `https://www.fma-li.li` — approved prospectuses | Midas base prospectus approval |
 | AFM (Netherlands) | notified-prospectus register `afm.nl/en/sector/registers/meldingenregisters/genotificeerde-prospectussen` | passported EU prospectuses |
 | MFSA (Malta) | `mfsa.mt/wp-content/uploads/YYYY/MM/<file>.pdf` | public PDF mirror of passported prospectuses |

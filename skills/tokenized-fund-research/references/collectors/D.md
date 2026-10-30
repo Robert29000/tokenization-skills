@@ -7,7 +7,7 @@ Collect what lending-protocol governance forums and risk curators say about the 
 3. **Extract**, citing the per-post URL (`…/t/<slug>/<id>/<post_number>`) and naming the author:
    - facts the issuer disclosed in the thread (structure, entities, documents quoted with section / page)
    - curator legal and risk analysis: governing law, regulatory perimeter, bankruptcy remoteness, waterfall ranking, custodian pledges, admin keys, redemption limits
-   - listing status and parameters for each protocol: proposed / live / rejected, LTV, liquidation threshold, caps, oracle
+   - listing status and parameters for each protocol: proposed / live / rejected, LTV, liquidation threshold, caps, oracle, each with the post date. Forum parameters are history; C reads the current ones on-chain.
    - unresolved questions raised in the thread
 4. If a product has no asset-specific thread on a forum, say so explicitly and use the other threads that forum's file points to, if any.
 5. A forum with no relevant threads: record the search and its empty result under **Gaps**.

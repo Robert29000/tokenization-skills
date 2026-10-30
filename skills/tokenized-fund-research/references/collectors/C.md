@@ -12,5 +12,7 @@ Collect what the code and the chain show. Give the address and the chain for eve
 4. **Oracle / NAV feed**: who publishes the price, from what source, how often, staleness checks, bounds.
 5. **Instant-redemption paths**: contracts, liquidity providers, daily limits, fees.
 6. **Audits and bug bounty**: auditors, dates, scope, unresolved findings; bug bounty platform and size.
+7. **Event history** of the token and its admin contracts, from deployment to today (explorer event logs or `eth_getLogs`; on non-EVM chains, the program's transaction history): upgrades, owner / admin changes, pauses, forced burns or transfers, freezes, allowlist changes, renames. Give the date, transaction and amount of each. These answer "Exercised to Date?" in 5.5; an unexplained forced burn or freeze is a lead for B.
+8. **Protocol positions**: for each contract among the top holders (lending pool, vault, stablecoin reserve, bridge), name the protocol and read its current parameters for the token on-chain or from the protocol's own API: LTV, liquidation threshold, supply cap, amount supplied, oracle. Also check the main lending protocols' market lists for the token, because an empty market holds no tokens and won't show up among the holders.
 
-Your facts feed report sections 3.3 (on-chain powers), 4.2 (allowlist enforcement), 5.5 (freeze / upgrade / pause powers) and 2.4 (instant liquidity).
+Your facts feed report sections 3.3 (on-chain powers), 5.5 (freeze / upgrade / pause powers and whether they were used), 4.2 (allowlist enforcement, eligible venues) and 2.4 (instant liquidity).

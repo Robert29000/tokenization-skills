@@ -7,6 +7,7 @@
   python3 -I edgar_search.py "Superstate Asset Trust" --forms D,N-1A   # D includes D/A
   python3 -I edgar_search.py "Apollo Diversified Credit" --raw --max-results 50 --json
   python3 -I edgar_search.py "Superstate Asset Trust" --forms D --details   # parse Form D XML
+  python3 -I edgar_search.py --submissions 20430 --forms X-17A-5   # one entity's EDGAR record
 
 The name is searched as an exact phrase (use --raw to pass your own query syntax).
 Results are grouped by CIK. For Form D filings the claimed exemptions are decoded
@@ -14,6 +15,13 @@ Results are grouped by CIK. For Form D filings the claimed exemptions are decode
 latest Form D of each matching issuer and prints related persons (managers, directors,
 promoters), minimum investment, amount sold, investor count and sales-compensation
 recipients (placement agents / broker-dealers).
+
+--submissions <CIK> reads one entity's EDGAR record instead of searching: legal name, state of
+incorporation, former names, the SEC file numbers on its recent filings (8- broker-dealer from
+X-17A-5, 84- transfer agent, 811- investment company, …) and the filings themselves. It is the
+official fallback when IAPD or BrokerCheck block scripts. Form ADV is not on EDGAR, so an
+adviser's 801- number appears only if another filing carries it. Find the CIK with a name
+search first.
 
 The User-Agent comes from SEC_USER_AGENT, or, when that is unset, from the one-line file given
 with --user-agent-file (so the contact never has to appear in a shell command).
@@ -37,6 +45,7 @@ import xml.etree.ElementTree as ET
 
 ENDPOINT = "https://efts.sec.gov/LATEST/search-index"
 ARCHIVE = "https://www.sec.gov/Archives/edgar/data"
+SUBMISSIONS = "https://data.sec.gov/submissions/CIK{cik}.json"
 PAGE_SIZE = 100          # efts returns 100 hits per page
 TIMEOUT = 30
 RETRIES = 3
@@ -46,6 +55,8 @@ FORM_RE = re.compile(r"^[A-Z0-9][A-Z0-9\-/]{0,15}$")
 EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 EARLIEST_DATE = "2001-01-01"   # efts full-text search coverage starts in 2001
 MAX_DETAILS = 5                 # Form D XML downloads per run
+MAX_SEARCH_RESULTS = 100        # default --max-results for a name search
+MAX_SUBMISSION_FILINGS = 20     # default --max-results for --submissions
 MAX_BYTES = 20 * 1024 * 1024    # largest response read; search pages and Form D XML are far smaller
 MAX_UA_FILE = 1024              # --user-agent-file holds one short line
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
@@ -59,6 +70,19 @@ FORM_D_ITEMS = {
     "3C": "Investment Company Act §3(c) exclusion",
     "3C.1": "ICA §3(c)(1) — ≤100 beneficial owners",
     "3C.7": "ICA §3(c)(7) — qualified purchasers only",
+}
+# SEC file-number prefixes that identify a registration type (others shown without a label).
+# data.sec.gov zero-pads them ("008-21323"), so they are compared without leading zeros.
+FILE_NUMBER_KINDS = {
+    "801": "investment adviser",
+    "802": "exempt reporting adviser",
+    "8": "broker-dealer",
+    "84": "transfer agent",
+    "811": "investment company (1940 Act)",
+    "812": "exemptive application",
+    "333": "Securities Act registration",
+    "28": "13F filer",
+    "21": "Form D offering",
 }
 # EDGAR state/country codes most relevant to tokenized funds (others shown raw).
 STATE_CODES = {"D8": "British Virgin Islands", "E9": "Cayman Islands", "DE": "Delaware"}
@@ -411,14 +435,110 @@ def group_by_cik(filings, phrase=""):
     return sorted(groups.values(), key=lambda g: (not g["name_match"], -len(g["filings"])))
 
 
+def parse_cik(value):
+    """Return the CIK as 10 digits; accepts '20430', '0000020430' or 'CIK20430'."""
+    v = re.sub(r"^cik", "", (value or "").strip(), flags=re.I)
+    if not re.fullmatch(r"\d{1,10}", v) or int(v) == 0:
+        raise ValueError(f"--submissions needs a numeric CIK, got '{value}'")
+    return v.zfill(10)
+
+
+def file_number_kind(number):
+    return FILE_NUMBER_KINDS.get(number.split("-", 1)[0].lstrip("0"), "")
+
+
+def _field(value):
+    """A string field from the SEC record, without control characters or runs of spaces."""
+    return re.sub(r"\s+", " ", CONTROL_RE.sub(" ", str(value or ""))).strip()
+
+
+def form_matches(form, forms):
+    """Like the full-text search, a form type also matches its amendments (D matches D/A)."""
+    return not forms or any(form in (f, f + "/A") for f in forms)
+
+
+def summarise_submissions(data, cik, forms=(), date_from=None, date_to=None):
+    """Condense a data.sec.gov submissions record. File numbers are taken from all recent filings;
+    the forms and dates filter only the filings listed."""
+    recent = ((data.get("filings") or {}).get("recent")) or {}
+    columns = [recent.get(c) for c in ("accessionNumber", "filingDate", "form", "fileNumber",
+                                       "primaryDocument")]
+    rows = min(len(c) for c in columns) if all(isinstance(c, list) for c in columns) else 0
+    filings, numbers = [], {}
+    for i in range(rows):
+        adsh, date, form, number, doc = (_field(c[i]) for c in columns)
+        url = f"{ARCHIVE}/{int(cik)}/{adsh.replace('-', '')}/{doc}" if adsh and doc else None
+        if number:
+            n = numbers.setdefault(number, {"file_number": number, "kind": file_number_kind(number),
+                                            "forms": [], "filings": 0, "latest": ""})
+            n["filings"] += 1
+            n["latest"] = max(n["latest"], date)
+            if form and form not in n["forms"]:
+                n["forms"].append(form)
+        if (form_matches(form, forms) and (not date_from or date >= date_from)
+                and (not date_to or date <= date_to)):
+            filings.append({"file_date": date, "form": form, "file_number": number, "adsh": adsh,
+                            "url": url})
+    filings.sort(key=lambda f: f["file_date"], reverse=True)
+    address = ((data.get("addresses") or {}).get("business")) or {}
+    return {
+        "cik": cik,
+        "name": _field(data.get("name")) or "?",
+        "entity_type": _field(data.get("entityType")),
+        "state_of_incorporation": STATE_CODES.get(_field(data.get("stateOfIncorporation")),
+                                                  _field(data.get("stateOfIncorporation"))),
+        "business_address": ", ".join(x for x in (_field(address.get("city")),
+                                                  _field(address.get("stateOrCountry"))) if x),
+        "former_names": [{"name": _field(f.get("name")), "from": _field(f.get("from"))[:10],
+                          "to": _field(f.get("to"))[:10]}
+                         for f in data.get("formerNames") or [] if isinstance(f, dict)],
+        "file_numbers": sorted(numbers.values(), key=lambda n: n["latest"], reverse=True),
+        "filings": filings,
+        # data.sec.gov keeps only the latest ~1,000 filings in "recent"; older ones sit in extra files
+        "older_filing_files": len((data.get("filings") or {}).get("files") or []),
+    }
+
+
+def print_submissions(r, shown, forms):
+    print(f"CIK {r['cik']} — {r['name']}")
+    facts = [f"{label}: {r[key]}" for label, key in (("entity type", "entity_type"),
+                                                     ("incorporated", "state_of_incorporation"),
+                                                     ("business address", "business_address"))
+             if r[key]]
+    if facts:
+        print("  " + " | ".join(facts))
+    for f in r["former_names"]:
+        print(f"  former name: {f['name']} ({f['from'] or '?'} to {f['to'] or '?'})")
+    if r["file_numbers"]:
+        print("  SEC file numbers (from recent filings):")
+        for n in r["file_numbers"]:
+            kind = f"  {n['kind']}" if n["kind"] else ""
+            print(f"    {n['file_number']:<14}{kind} — {', '.join(n['forms'])}; "
+                  f"{n['filings']} filing(s), latest {n['latest'] or '?'}")
+    else:
+        print("  SEC file numbers: none in recent filings")
+    listed = r["filings"][:shown]
+    print(f"  {len(listed)} of {len(r['filings'])} recent filing(s)"
+          + (f" (forms: {','.join(forms)})" if forms else "") + ":")
+    for f in listed:
+        print(f"    {f['file_date']}  {f['form']:<10} {f['file_number']:<14} {f['url'] or f['adsh']}")
+    if r["older_filing_files"]:
+        print(f"  note: {r['older_filing_files']} older filing file(s) on data.sec.gov are not read")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="SEC EDGAR full-text search grouped by CIK.")
-    ap.add_argument("name", help="entity / fund name (searched as an exact phrase)")
+    ap.add_argument("name", nargs="?", help="entity / fund name (searched as an exact phrase)")
+    ap.add_argument("--submissions", metavar="CIK",
+                    help="read this entity's EDGAR record (file numbers, former names, filings) "
+                         "instead of searching")
     ap.add_argument("--forms", help="comma list of form types, e.g. D,N-1A (default: all)")
     ap.add_argument("--raw", action="store_true", help="send the query as-is (no phrase quoting)")
     ap.add_argument("--from-date", help="YYYY-MM-DD")
     ap.add_argument("--to-date", help="YYYY-MM-DD")
-    ap.add_argument("--max-results", type=int, default=100)
+    ap.add_argument("--max-results", type=int,
+                    help=f"filings to show (default {MAX_SEARCH_RESULTS}; "
+                         f"{MAX_SUBMISSION_FILINGS} with --submissions)")
     ap.add_argument("--details", action="store_true",
                     help=f"parse the latest Form D XML of up to {MAX_DETAILS} matching issuers")
     ap.add_argument("--user-agent-file",
@@ -443,8 +563,18 @@ def main(argv=None):
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
-    if not build_query(args.name, args.raw).strip('" '):
-        print("error: empty entity name", file=sys.stderr)
+    cik = None
+    if args.submissions is not None:
+        if args.name or args.raw or args.details:
+            print("error: --submissions takes no name, --raw or --details", file=sys.stderr)
+            return 2
+        try:
+            cik = parse_cik(args.submissions)
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+    elif not build_query(args.name, args.raw).strip('" '):
+        print("error: give an entity name or --submissions <CIK>", file=sys.stderr)
         return 2
     for d in (args.from_date, args.to_date):
         if d is None:
@@ -457,12 +587,32 @@ def main(argv=None):
     if args.from_date and args.to_date and args.from_date > args.to_date:
         print("error: --from-date is after --to-date", file=sys.stderr)
         return 2
-    if args.max_results < 1:
+    if args.max_results is not None and args.max_results < 1:
         print("error: --max-results must be >= 1", file=sys.stderr)
         return 2
 
+    if cik:
+        try:
+            data = fetch_json(SUBMISSIONS.format(cik=cik), ua)
+        except FetchError as e:
+            print(f"error: no EDGAR record for CIK {cik}" if e.status == 404 else f"error: {e}",
+                  file=sys.stderr)
+            return 1
+        if not isinstance(data, dict) or not data.get("name"):
+            print(f"error: no EDGAR record for CIK {cik}", file=sys.stderr)
+            return 1
+        record = summarise_submissions(data, cik, forms, args.from_date, args.to_date)
+        shown = args.max_results or MAX_SUBMISSION_FILINGS
+        if args.json:
+            print(json.dumps(dict(record, filings=record["filings"][:shown]), indent=2,
+                             ensure_ascii=False))
+        else:
+            print_submissions(record, shown, forms)
+        return 0
+
+    max_results = args.max_results or MAX_SEARCH_RESULTS
     try:
-        filings, total = search(args.name, forms, ua, args.max_results, args.raw,
+        filings, total = search(args.name, forms, ua, max_results, args.raw,
                                 args.from_date, args.to_date)
     except FetchError as e:
         print(f"error: {e}", file=sys.stderr)
