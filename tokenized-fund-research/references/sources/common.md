@@ -27,9 +27,7 @@ primary source, trust the primary source and record the change in Appendix A.
    HTML docs, DeFiLlama, BrokerCheck / IAPD, `invesco.com` (406 to curl), and MFSA (a Cloudflare
    challenge to curl; try WebFetch). Fall back in this order and record which one worked:
    llms.txt / `.md` → official mirror (regulator register, IPFS, EDGAR) → web search with
-   `site:` filter and quoted snippets → browser skill (`claude-in-chrome`, built-in browser) if
-   available, read-only: a new tab, public pages, no clicks on investor attestations or terms, no
-   forms → record as "not accessible" in Appendix A.
+   `site:` filter and quoted snippets → record as "not accessible" in Appendix A.
 4. **Gated investor portals** (Securitize investor onboarding, data rooms): never try to log in.
    Use public copies (EDGAR, regulator registers, forum posts where the issuer quoted the
    documents, risk-curator reviews that cite section numbers) and list the gated document as
@@ -40,7 +38,7 @@ primary source, trust the primary source and record the change in Appendix A.
 | Source | URL / pattern | Use for |
 |---|---|---|
 | rwa.xyz | `https://app.rwa.xyz/assets/{TICKER}` (long slugs also work; the page data sits in the `<script id="__NEXT_DATA__">` JSON — curl the page and parse that instead of reading rendered HTML); `/platforms/{slug}`, `/asset-managers/{slug}` | AUM, holders, chains, contract addresses, issuer LEI / SEC CIK links. **Its service-provider fields (manager, custodian, auditor) can be stale** — the USTB run found all three wrong — so never cite rwa.xyz for a role; cite it only for on-chain metrics. |
-| DeFiLlama RWA | `https://defillama.com/rwa/asset/{TICKER}` | fallback for metrics; returns 403 to curl and WebFetch — use only through a browser skill |
+| DeFiLlama RWA | `https://defillama.com/rwa/asset/{TICKER}` | fallback for metrics; returns 403 to curl and WebFetch, so only search snippets reach it — prefer rwa.xyz |
 | Wayback Machine | `https://web.archive.org/web/<YYYY>*/<url>*`; raw snapshot `https://web.archive.org/web/<timestamp>id_/<url>` | dating changes of manager / provider / terms; recovering pages that changed |
 | SEC EDGAR | `scripts/edgar_search.py "<entity>" --forms D` | US-offered funds: Form D (exemptions → investor eligibility), N-1A, 13F, S-1 |
 | GLEIF LEI | `https://search.gleif.org/#/search/simpleSearch=<name>` | exact legal name, jurisdiction, registered address, parent |
@@ -57,7 +55,7 @@ primary source, trust the primary source and record the change in Appendix A.
 |---|---|---|
 | SEC (US) | EDGAR; transfer-agent registrations via Form TA | fund filings, transfer-agent status |
 | SEC IAPD (US) | `https://adviserinfo.sec.gov` | registered investment advisers (Form ADV) |
-| FINRA (US) | `https://brokercheck.finra.org` | broker-dealer / ATS status. Both IAPD and BrokerCheck sit behind Cloudflare (a 307 challenge) for scripts; use a browser skill, or use the CRD number from the Form D (`--details`) together with search snippets |
+| FINRA (US) | `https://brokercheck.finra.org` | broker-dealer / ATS status. Both IAPD and BrokerCheck sit behind Cloudflare (a 307 challenge) for scripts; use the CRD number from the Form D (`--details`) together with search snippets |
 | FMA (Liechtenstein) | `https://www.fma-li.li` — approved prospectuses | Midas base prospectus approval |
 | AFM (Netherlands) | notified-prospectus register `afm.nl/en/sector/registers/meldingenregisters/genotificeerde-prospectussen` | passported EU prospectuses |
 | MFSA (Malta) | `mfsa.mt/wp-content/uploads/YYYY/MM/<file>.pdf` | public PDF mirror of passported prospectuses |
