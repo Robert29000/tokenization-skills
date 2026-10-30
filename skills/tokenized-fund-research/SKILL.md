@@ -83,7 +83,7 @@ Write the choice into `product.md`. When resuming an interrupted run, reuse it r
 1. **Platform sources.** Write the platform name in lowercase (letters, digits, hyphens), e.g. `midas` or `franklin`. It names the report file and the work dir.
    - If `references/sources/<platform>.md` exists, read it together with `references/sources/common.md`.
    - Otherwise, if `reports/.work/platform-<platform>/sources.md` exists (a draft from an earlier run), read that instead.
-   - Otherwise, invoke the **`tokenization-platform-fetch`** skill with the platform name and this product, and wait until it finishes. It writes that draft and offers to add it to this skill. Then read it. If that skill isn't installed, stop and ask the user to install it from the same repository.
+   - Otherwise, invoke the **`tokenization-platform-fetch`** skill with the platform name and this product, and wait until it finishes. It writes that draft and offers to add it to this skill. Then read it. If that skill isn't installed, stop and ask the user to install it, e.g. with the prompt `Install https://github.com/Robert29000/tokenization-skills`.
 
    `build_bundles.py` picks the same file in Step 1: the skill's own file first, then the draft.
 2. Pin down the identifiers: ticker, full product name, issuer **legal entity**, legal form of the token (share / trust interest / certificate / note / wrapper), underlying fund and manager, chains and main contract addresses.

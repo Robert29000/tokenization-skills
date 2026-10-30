@@ -66,7 +66,7 @@ Spend the effort on finding and verifying pointers, not on reading the documents
 
 ### Step 4: Ask whether to update tokenized-fund-research
 
-Skip this step if Step 1 found no skill. In that case, tell the user that tokenized-fund-research would use the draft once it's installed.
+Skip this step if Step 1 found no skill. In that case, tell the user that tokenized-fund-research would use the draft once it's installed (`Install https://github.com/Robert29000/tokenization-skills`).
 
 1. Run `diff -u <skill>/references/sources/<slug>.md <draft>`, or just show the draft when the file is new.
 2. Ask with `AskUserQuestion`. The user may see only the dialog, so the question must name the platform, the target path, and whether it's a new file or an update (with how many lines change). It must also say that every future research run on this platform will read the file. Options:

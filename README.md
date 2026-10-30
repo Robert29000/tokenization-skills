@@ -4,17 +4,18 @@
 
 ## Requirements
 
-- **Python 3.9 or newer** as `python3`. The scripts (forum and EDGAR search, bundle builder, report and sources checkers) use only the standard library, so there is nothing to `pip install`. Tested on 3.9, 3.10 and 3.13.
-- **curl**, for downloading documents.
-- **PDF tools (Optional)** `pdftotext` and `pdftoppm` from poppler (`brew install poppler` or `apt install poppler-utils`) make reading long prospectuses much cheaper. Without them the skill falls back to `pypdf`, if it is installed, or to search snippets.
-- **SEC contact (Optional)** (a name and email) for EDGAR searches. Set `SEC_USER_AGENT`, or give it when the skill asks. Without it the report is written without EDGAR, and Appendix A says so.
+| Requirement | Status | Purpose |
+|---|---|---|
+| Python 3.9 or later, available as `python3` | Required | Runs the bundled scripts: forum and EDGAR search, bundle builder, report and sources checkers. The scripts use only the Python standard library; no packages need to be installed. Tested with Python 3.9, 3.10 and 3.13. |
+| `curl` | Required | Downloads documents. It is included with macOS and most Linux distributions. |
+| Poppler (`pdftotext`, `pdftoppm`) | Optional | Extracts text and pages from PDF offering documents, which substantially reduces the cost of reading long prospectuses. Install with `brew install poppler` (macOS) or `apt install poppler-utils` (Debian / Ubuntu). If Poppler is absent, the skill uses `pypdf` where installed, and otherwise relies on search snippets. |
 
 ## Install, Run & Update Prompts
 
 Install:
 ```
-Install <repo-url> and research Midas mTBILL
-Install <repo-url> and add the Franklin Templeton platform to tokenized-fund-research
+Install https://github.com/Robert29000/tokenization-skills and research Midas mTBILL
+Install https://github.com/Robert29000/tokenization-skills and add the Franklin Templeton platform to tokenized-fund-research
 ```
 
 Run:
