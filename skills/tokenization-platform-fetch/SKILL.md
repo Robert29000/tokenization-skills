@@ -51,9 +51,9 @@ Spend the effort on finding and verifying pointers, not on reading the documents
 | Legal | issuer entities: legal name and jurisdiction, LEI from GLEIF (`https://api.gleif.org/api/v1/lei-records?filter[fulltext]=<name>`); where the offering documents live (public PDF, IPFS, regulator mirror, or gated portal); regulators and register entries |
 | EDGAR CIK | SEC full-text search needs a User-Agent with a contact. Use `SEC_USER_AGENT` if the environment has it, e.g. `curl -s -A "$SEC_USER_AGENT" "https://efts.sec.gov/LATEST/search-index?q=%22<entity>%22&forms=D"`; otherwise write `not checked` (collector B looks it up in a research run) |
 | GitHub | the org linked from the docs or website, or from the explorer's verified-source page of a main contract; confirm with `https://api.github.com/orgs/<org>` |
-| Forums | `https://<forum>/search.json?q=<brand>` on governance.aave.com, forum.morpho.org, forum.euler.finance and gov.fluid.io (thread titles and topic ids only), plus the platform's own governance forum |
+| Forums | `python3 -I <skill>/scripts/forum_search.py "<brand>"`, which searches every forum in `<skill>/references/forums/` (keep thread titles and topic ids only), plus the platform's own governance forum |
 
-**Fetching**: try `llms.txt` / `.md` pages first. When a page returns 403 / 406 or a bot challenge, fall back to an official mirror (regulator register, IPFS, EDGAR), then a web search with `site:`, then a browser skill if one is available (read-only: a new tab, public pages, no clicks on gates or forms). Record what blocked and what worked; that goes into the Docs or Legal bullet.
+**Fetching**: try `llms.txt` / `.md` pages first. When a page returns 403 / 406 or a bot challenge, fall back to an official mirror (regulator register, IPFS, EDGAR), then a web search with `site:`. Never use a browser skill or launch a browser: it acts with the user's own sign-ins. Record what blocked and what worked; that goes into the Docs or Legal bullet.
 
 **Downloads**: `curl -sL --max-filesize 100000000 -o reports/.work/platform-<slug>/raw/<name> <url>`, with a file name you choose. Parse JSON with `python3 -I`, passing the file path as an argument.
 

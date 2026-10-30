@@ -11,8 +11,10 @@ import unittest
 sys.dont_write_bytecode = True   # keep __pycache__ out of the skill folder
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
-SKILL_DIR = os.path.dirname(TESTS_DIR)
-RESEARCH_DIR = os.path.join(os.path.dirname(SKILL_DIR), "tokenized-fund-research")
+# tests/<skill>/ mirrors skills/<skill>/
+SKILLS_DIR = os.path.join(os.path.dirname(os.path.dirname(TESTS_DIR)), "skills")
+SKILL_DIR = os.path.join(SKILLS_DIR, "tokenization-platform-fetch")
+RESEARCH_DIR = os.path.join(SKILLS_DIR, "tokenized-fund-research")
 spec = importlib.util.spec_from_file_location("check_sources", os.path.join(SKILL_DIR, "scripts", "check_sources.py"))
 sf = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sf)
