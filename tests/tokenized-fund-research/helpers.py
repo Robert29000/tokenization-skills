@@ -12,7 +12,8 @@ import urllib.error
 sys.dont_write_bytecode = True
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
-SKILL_DIR = os.path.dirname(TESTS_DIR)
+# tests/<skill>/ mirrors skills/<skill>/
+SKILL_DIR = os.path.join(os.path.dirname(os.path.dirname(TESTS_DIR)), "skills", "tokenized-fund-research")
 SCRIPTS = os.path.join(SKILL_DIR, "scripts")
 FIXTURES = os.path.join(TESTS_DIR, "fixtures")
 

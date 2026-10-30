@@ -23,7 +23,7 @@ import sys
 
 # ---------------------------------------------------------------------------
 # Canonical structure. references/report-template.md must mirror this exactly
-# (tests/test_check_report.py enforces that).
+# (tests/tokenized-fund-research/test_check_report.py at the repo root enforces that).
 # ---------------------------------------------------------------------------
 
 SECTIONS = [
