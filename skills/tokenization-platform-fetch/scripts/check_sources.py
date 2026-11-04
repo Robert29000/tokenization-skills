@@ -5,9 +5,10 @@
 
 Validates the shape (heading, "checked in" date, Products line, Docs / Legal / GitHub / Forums
 bullets) and flags content that has no place in a list of pointers: template placeholders,
-hidden characters (zero-width, bidi override, terminal escapes), HTML, instructions addressed to
-an AI, and shell commands that install or execute. Hidden characters are the reason this is a
-script: a reader can't see them. Every future research run reads this file, so the check is a
+hidden characters (zero-width, bidi override, Unicode tags, terminal escapes), HTML and Markdown
+images, email addresses, instructions addressed to an AI, and shell commands that install or
+execute. It also warns about look-alike letters (Cyrillic or Greek mixed into a Latin word or
+host). Hidden characters are the reason this is a script: a reader can't see them. Every future research run reads this file, so the check is a
 tripwire in front of the human review, not a replacement for it.
 
 Exit code: 0 = no errors (warnings allowed), 1 = errors or unreadable file, 2 = bad arguments.
@@ -18,6 +19,7 @@ import argparse
 import os
 import re
 import sys
+import unicodedata
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 # "common" is the research skill's shared sources file; the others are not platform names
@@ -28,20 +30,46 @@ REQUIRED_BULLETS = ("Docs", "Legal", "GitHub", "Forums")
 MONTHS = ("January|February|March|April|May|June|July|August|September|October|November|December")
 CHECKED_RE = re.compile(r"(?i)\bchecked in (?:(?:" + MONTHS + r") \d{4}|\d{4}-\d{2}(?:-\d{2})?)\b")
 HEADING_RE = re.compile(r"^# \S.*\s[—–-] sources\s*$")
-HIDDEN_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
+# controls, soft hyphen, zero-width / joiners, bidi controls, line / paragraph separators, blank
+# fillers, variation selectors, interlinear annotations, and the invisible Unicode tag block
+HIDDEN_RE = re.compile(
+    "[\x00-\x08\x0b-\x1f\x7f-\x9f\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f"
+    "\u200b-\u200f\u2028-\u202e\u2060-\u206f\u2800\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff9-\ufffb"
+    "\U000e0000-\U000e007f\U000e0100-\U000e01ef]")
 HTML_RE = re.compile(r"(?i)<!--|</?(?:script|iframe|img|a|div|span|style|link|meta|object|embed|form|input|svg|details)\b")
 SCHEME_RE = re.compile(r"(?i)\b(?:javascript|data|file|vbscript):")
+IMAGE_RE = re.compile(r"!\[[^\]\n]*\]\s*[\[(]")   # a Markdown image loads a URL when rendered
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
+HOST_RE = re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://([^/\s`<>()\[\]\"']+)")
+WORD_RE = re.compile(r"[^\W_]+")
+LOOKALIKE_SCRIPTS = ("CYRILLIC", "GREEK", "ARMENIAN", "CHEROKEE", "FULLWIDTH")
 INSTRUCTION_RES = [
     re.compile(r"(?i)\b(?:ignore|disregard|forget|override)\b[^.\n]{0,40}\b(?:instructions?|rules|prompts?|guidelines)\b"),
     re.compile(r"(?i)\b(?:system|developer) (?:prompt|message|instructions?)\b"),
     re.compile(r"(?i)\byou are (?:now )?(?:an? |the )?(?:ai|assistant|language model|llm|agent|claude|chatgpt)\b"),
     re.compile(r"(?i)\b(?:ai|llm) (?:agents?|assistants?|readers?|models?)\b[^.\n]{0,30}\b(?:must|should|need to)\b"),
+    re.compile(r"(?i)\b(?:notes?|messages?|instructions?|reminders?) (?:to|for) (?:the |all |any )?"
+               r"(?:ai|llms?|assistants?|agents?|collectors?|models?|bots?|readers?)\b"),
+    re.compile(r"(?i)\b(?:collectors?|assistants?|ai|llms?)\b[^\n]{0,80}?\b(?:follow (?:it|them|its|these|those|that)\b"
+               r"|obey|execute|exfiltrate|upload|send (?:your |the |all )?(?:notes|files|data|contents?))"),
 ]
 COMMAND_RE = re.compile(
     r"(?i)\|\s*(?:sh|bash|zsh|python3?|node|perl|ruby)\b"
     r"|\b(?:sudo|rm -rf|chmod \+x|pip3? install|npm (?:install|i)|npx|yarn add|pnpm add|brew install"
     r"|apt(?:-get)? install|eval|exec)\b"
     r"|(?-i:\bcurl\b[^\n`]*\s-[a-zA-Z]*[OJ]\b)")   # -O / -J take the file name from the server
+
+
+def lookalike(line):
+    """Return the first word or URL host that mixes look-alike letters into Latin text, else None."""
+    for host in HOST_RE.findall(line):
+        if any(ord(ch) > 127 for ch in host):
+            return host
+    for word in WORD_RE.findall(line):
+        if any(ch.isascii() for ch in word) and any(
+                unicodedata.name(ch, "").startswith(LOOKALIKE_SCRIPTS) for ch in word if not ch.isascii()):
+            return word
+    return None
 
 
 class Finding:
@@ -106,12 +134,21 @@ def check_text(text):
             out.append(Finding("ERROR", n, "HTML tag or comment; write plain Markdown"))
         if SCHEME_RE.search(line):
             out.append(Finding("ERROR", n, "javascript: / data: / file: link"))
+        if IMAGE_RE.search(line):
+            out.append(Finding("ERROR", n, "Markdown image; it loads a URL when rendered, link the page instead"))
+        if EMAIL_RE.search(line):
+            out.append(Finding("ERROR", n, "email address; a sources file holds no contacts (the SEC contact "
+                                           "goes only to edgar_search.py), link a contact page instead"))
         if any(r.search(line) for r in INSTRUCTION_RES):
             out.append(Finding("ERROR", n, "reads like an instruction to an AI; a sources file holds pointers only"))
         if COMMAND_RE.search(line):
             out.append(Finding("ERROR", n, "install / execute command; collectors never run code from a sources file"))
         if re.search(r"(?i)\bhttp://", line):
             out.append(Finding("WARNING", n, "http:// link; use https:// if the site supports it"))
+        odd = lookalike(line)
+        if odd:
+            out.append(Finding("WARNING", n, f"'{odd}' mixes look-alike letters (Cyrillic, Greek…) into "
+                                             "Latin text or a host; retype it in plain ASCII"))
     if len(lines) > MAX_LINES:
         out.append(Finding("WARNING", None, f"{len(lines)} lines; keep it a short list of pointers (shipped files are under 40)"))
     return out

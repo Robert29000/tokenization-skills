@@ -43,7 +43,7 @@ update skills to latest version
 tokenized-fund-research ships sources for Securitize, Superstate, Centrifuge, Midas and Ondo. For any other platform:
 
 1. tokenized-fund-research runs tokenization-platform-fetch first, so install both skills.
-2. The fetch skill writes a draft to `reports/.work/platform-<slug>/sources.md` and checks it with `check_sources.py` for format and for hidden or unsafe content.
+2. The fetch skill writes a draft and checks it with `check_sources.py` for format and for hidden or unsafe content. Only a draft that passes is saved as `reports/.work/platform-<slug>/sources.md`, the path research runs read.
 3. It shows you the diff and asks whether to update tokenized-fund-research. Nothing changes in the research skill without your yes.
    - **Update the skill**: the draft becomes `tokenized-fund-research/references/sources/<slug>.md`, and every later run on that platform uses it.
    - **Keep the draft only**: research runs keep using the draft from `reports/.work/`.
