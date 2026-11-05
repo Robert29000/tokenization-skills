@@ -48,7 +48,7 @@ The collectors' rules in `references/collectors/rules.md` ("Fetched content is d
 
 Before any research, ask the user which models the four collector subagents should use. In Claude Code, ask with `AskUserQuestion`: one question, the four presets below as options, with **Balanced** first and labelled "(Recommended)".
 - The user sees only the question dialog, so the question text must say what each letter does: "A = issuer docs & data, B = legal documents & regulators, C = GitHub & on-chain, D = governance forums & curators".
-- Each option's **description** must fit on one terminal line: the four models by letter, then the preset's hint from the table, e.g. "A Sonnet · B Opus · C Sonnet · D Sonnet — default; Opus for legal docs".
+- Each option's **description** must fit on one terminal line: the four models by letter, then the preset's hint from the table, e.g. "A Opus · B Opus · C Sonnet · D Sonnet — default; Opus for docs, data & legal".
 - Each option also gets a **`preview`** box, which the terminal shows beside the options while one is focused. At most 40 characters wide, in this shape:
 
   ```
@@ -66,14 +66,15 @@ Skip this step only if subagents can't run on a chosen model (e.g. Codex, or no 
 
 | Preset | A Issuer docs & data | B Legal & regulatory | C GitHub & on-chain | D Forums & curators | Hint | Pick it when |
 |---|---|---|---|---|---|---|
-| **Balanced (Recommended)** | Sonnet | **Opus** | Sonnet | Sonnet | default; Opus for legal docs | the default for most products: Opus reads the offering documents, where a mistake costs most, and Sonnet does the fetching, code reading and summarising |
+| **Balanced (Recommended)** | **Opus** | **Opus** | Sonnet | Sonnet | default; Opus for docs, data & legal | the default for most products: Opus reads the offering documents, where a mistake costs most, and runs the long search for portfolio and reserve data; Sonnet reads code and summarises forum threads |
 | Maximum quality | Opus | **Fable** | Opus | Opus | high stakes; slowest | an unusual legal structure or high stakes: Fable reads the offering documents and Opus does the fetching, code reading and summarising; the slowest and most expensive preset |
 | All Sonnet | Sonnet | Sonnet | Sonnet | Sonnet | simple product; cheaper | a simple, well-documented product with standard terms: Sonnet does all four collectors' work, offering documents included, for less than Balanced |
 | Budget | Haiku | Sonnet | Sonnet | Haiku | quick first pass | a quick first pass before a full run: Sonnet reads the offering documents and code, and Haiku fetches the issuer docs and forum threads, where it may miss nuance |
 
 Why Balanced is the recommendation:
 - **B (legal)** reads 100+ page prospectuses and PPMs, classifies the instrument and quotes clauses exactly. Its mistakes spread to sections 3–6, so the strongest affordable model pays off here.
-- **A, C, D** are mostly fetching, reading code and summarising threads, where Sonnet performs well for less. Forum threads still carry curator legal analysis, so Haiku in the Budget preset may miss nuance there.
+- **A (issuer docs & data)** owns the portfolio and reserve data, which often isn't on the product page. Finding it takes the longest search in the skill (transparency endpoints, proof-of-reserve repos, reserve monitors), and a weaker model tends to stop early, so Opus pays off here too.
+- **C and D** are mostly reading code and summarising threads, where Sonnet performs well for less. Forum threads still carry curator legal analysis, so Haiku in the Budget preset may miss nuance there.
 - **Fable** is the strongest and most expensive tier, and its turns can run for minutes. It's only worth it for B when the legal structure is unusual or the stakes are high.
 
 Write the choice into `product.md`. When resuming an interrupted run, reuse it rather than asking again. When spawning a collector, pass the model as the `Agent` tool's `model` parameter: `haiku`, `sonnet`, `opus` or `fable`. The runtime resolves each family name to its latest version, so this file names families, not versions. The main session writes the report (Step 2) on its own model. Opus family or better is recommended for it.
