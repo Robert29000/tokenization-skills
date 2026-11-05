@@ -22,6 +22,13 @@ primary source, trust the primary source and record the change in Appendix A.
    - Codex / shell: `pdftotext -layout file.pdf -` if installed, otherwise
      `python3 -c "import pypdf"` to check for pypdf. If neither exists, say so and fall back to
      search snippets.
+   - **Scanned pages have no text.** Signed pages, auditor's opinions and annexes are often
+     images, and `pdftotext` returns nothing for them. Check the word count per page
+     (`pdftotext -f N -l N file.pdf - | wc -w`). For every page with 0 words, render it
+     (`pdftoppm -f N -l N -r 70 -png file.pdf <your folder>/pages/p`) and read the image. A
+     text search of `pdftotext` output is not proof that something is absent: before you
+     write that a document "contains no" clause, opinion or signature, read its image-only pages.
+     Without `pdftoppm`, list the image-only pages under Gaps.
    - Record document name, date, page / section number for every fact.
 3. **403 / 406 / bot protection.** Known blockers as of Oct 2026: `docs.midas.app`, Centrifuge
    HTML docs, DeFiLlama, BrokerCheck / IAPD, `invesco.com` (406 to curl), and MFSA (a Cloudflare
