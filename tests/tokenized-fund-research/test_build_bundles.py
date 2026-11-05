@@ -387,6 +387,8 @@ class SkillCopyTests(Base):
 class StatusTests(Base):
     COMPLETE = ("- fact one\n  src: https://a | doc | p. 1 | accessed 2026-10-28\n"
                 "- fact two\n  src: https://b | doc | §2 | accessed 2026-10-28\n\n"
+                "## Core items\n- Portfolio composition: found — USTB 94% [src above]\n"
+                "- AUM and NAV: not found — tried: issuer page (403); transparency API (403)\n\n"
                 "## Gaps\n- none\n\n## Conflicts\n- none\n\n## Leads for B\n- x\n")
 
     def test_all_states(self):
@@ -400,17 +402,18 @@ class StatusTests(Base):
         self.assertIn("complete", lines["A"])
         self.assertIn("   2 facts", lines["A"])
         self.assertIn("incomplete", lines["B"])
-        self.assertIn("missing lists: Conflicts, Leads", lines["B"])
+        self.assertIn("missing lists: Core items, Conflicts, Leads", lines["B"])
+        self.assertIn("core open: 1/2", lines["A"])
         self.assertIn("missing", lines["C"])
         self.assertIn("   1 raw files", lines["C"])
         self.assertIn("1/4 complete", out)
         self.assertFalse(any(n.startswith("bundle-") for n in os.listdir(self.work)))   # builds nothing
 
     def test_heading_variants_and_exit_0(self):
-        variants = ["**Gaps**\n**Conflicts**\n**Leads for A**\n",
-                    "Gaps:\n- a\nConflicts:\n- b\nLeads:\n- c\n",
-                    "1. Gaps\n2. Conflicts\n3. Leads for C\n",
-                    "### gaps\n### conflicts\n### leads for d\n"]
+        variants = ["**Core items**\n**Gaps**\n**Conflicts**\n**Leads for A**\n",
+                    "Core items:\n- x: found\nGaps:\n- a\nConflicts:\n- b\nLeads:\n- c\n",
+                    "1. Core items\n2. Gaps\n3. Conflicts\n4. Leads for C\n",
+                    "### core items\n### gaps\n### conflicts\n### leads for d\n"]
         for letter, tail in zip("ABCD", variants):
             self.write(f"notes-{letter}.md", "- f\n  src: s\n\n" + tail)
         code, out, _ = self.run_main(self.work, "--status")
@@ -432,11 +435,59 @@ class StatusTests(Base):
         self.assertEqual(code, 1)
         self.assertIn("work dir not found", err)
 
+    def test_core_items_and_leads_counted(self):
+        self.write("notes-A.md", self.COMPLETE.replace("## Leads for B\n- x\n",
+                   "## Leads for B\n- https://x/ft-2026.pdf (current Final Terms)\n- y\n\n"
+                   "**Leads for C**\n1. 0xabc vault\n\n## Leads for A\n- self-lead is ignored\n"))
+        self.write("notes-D.md", self.COMPLETE + "  - nested detail is not a lead\n")
+        self.write("notes-B.md", "- f\n  src: s\n\n## Core items\n- Current offering documents: partial — "
+                   "2025 terms read, 2026 not obtained\n- Governing law: found\n- Powers: Not found\n\n"
+                   "## Gaps\n- g\n## Conflicts\n- c\n## Leads for A\n- l\n")
+        code, out, _ = self.run_main(self.work, "--status")
+        lines = {l[0]: l for l in out.splitlines() if l[:1] in "ABCD" and l[1:3] == "  "}
+        self.assertIn("core open: 2/3", lines["B"])
+        self.assertIn("core open: 1/2", lines["D"])
+        self.assertNotIn("core open", lines["C"])                 # no notes yet
+        self.assertIn("leads for B: 3 (A:2, D:1)", out)
+        self.assertIn("leads for C: 1 (A:1)", out)
+        self.assertIn("leads for A: 1 (B:1)", out)
+        # a subset still counts leads written by collectors outside it
+        code, out, _ = self.run_main(self.work, "--status", "--collectors", "B")
+        self.assertIn("leads for B: 3 (A:2, D:1)", out)
+        self.assertNotIn("leads for A", out)
+
     def test_status_needs_no_product_md(self):
         os.remove(os.path.join(self.work, "product.md"))
         code, out, _ = self.run_main(self.work, "--status")
         self.assertEqual(code, 1)
         self.assertIn("0/4 complete", out)
+
+
+class FollowupTests(Base):
+    def test_followup_needs_its_file(self):
+        code, _, err = self.run_main(self.work, "--collectors", "B", "--followup")
+        self.assertEqual(code, 1)
+        self.assertIn("followup-B.md is missing or empty", err)
+        self.write("followup-B.md", "  \n")
+        code, _, err = self.run_main(self.work, "--collectors", "B", "--followup")
+        self.assertEqual(code, 1)
+
+    def test_followup_prompt(self):
+        self.write("notes-B.md", StatusTests.COMPLETE)
+        self.write("followup-B.md", "# Follow-up for collector B\n- https://x/ft-2026.pdf (from notes-A.md)\n")
+        code, out, err = self.run_main(self.work, "--collectors", "B", "--followup")
+        self.assertEqual(code, 0, err)
+        prompt = self.read("prompt-B.md")
+        self.assertIn("This is a follow-up run.", prompt)
+        self.assertIn(f"{os.path.normpath(self.work)}/followup-B.md", prompt)
+        self.assertNotIn("resumed run", prompt)                   # follow-up replaces the resume text
+        self.assertNotIn("\n\n\n", prompt)
+        self.assertIn("[follow-up]", out)
+        self.assertEqual(sorted(n for n in os.listdir(self.work) if n.startswith("prompt")), ["prompt-B.md"])
+
+    def test_followup_and_status_conflict(self):
+        code, _, err = self.run_main(self.work, "--status", "--followup")
+        self.assertEqual(code, 2)
 
 
 class LayoutTests(unittest.TestCase):

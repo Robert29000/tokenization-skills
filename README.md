@@ -35,7 +35,7 @@ update skills to latest version
 
 | Skill | Description |
 |---|---|
-| [tokenized-fund-research](skills/tokenized-fund-research) | One cited report per product: underlying assets, legal entities and roles, who can invest, investor rights and the fund's obligations. Four parallel collectors (issuer docs, legal, on-chain, forums); every legal claim is checked against a primary source |
+| [tokenized-fund-research](skills/tokenized-fund-research) | One cited report per product: underlying assets, legal entities and roles, who can invest, investor rights and the fund's obligations. Four parallel collectors (issuer docs, legal, on-chain, forums) plus one follow-up pass that hands each collector the others' leads and its open core items; every legal claim is checked against a primary source |
 | [tokenization-platform-fetch](skills/tokenization-platform-fetch) | Finds where a tokenization platform publishes its products, docs, legal documents, registers, GitHub and forum threads, and writes them as a short sources file. After your review, it can update tokenized-fund-research with it |
 
 ## How the skills work together

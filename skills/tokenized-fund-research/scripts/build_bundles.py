@@ -4,6 +4,7 @@
   python3 -I build_bundles.py reports/.work/midas-mTBILL
   python3 -I build_bundles.py reports/.work/midas-mTBILL --collectors B,D
   python3 -I build_bundles.py reports/.work/midas-mTBILL --status   # are the collectors' notes complete?
+  python3 -I build_bundles.py reports/.work/midas-mTBILL --collectors B --followup
 
 Reads <work dir>/product.md. Its "Platform:" line selects the platform sources:
 references/sources/<platform>.md when the skill has one, otherwise the draft that the
@@ -19,9 +20,15 @@ The same inputs always give byte-identical outputs. The orchestrator passes prom
 collector unchanged. The resume paragraph is added automatically when <work dir>/<L>/ or
 notes-<L>.md already holds content from an earlier attempt.
 
+--followup builds a follow-up prompt instead: the collector reads <work dir>/followup-<L>.md (the
+leads other collectors left for it and its open core items, written by the orchestrator) and works
+only on those. The file must exist and be non-empty.
+
 --status builds nothing. It reports, per collector, whether notes-<L>.md exists, how many sourced
-facts (src: lines) it holds, and whether it ends with the closing Gaps / Conflicts / Leads lists
-that references/collectors/rules.md requires. A collector is "complete" only with all three.
+facts (src: lines) it holds, and whether it ends with the closing Core items / Gaps / Conflicts /
+Leads lists that references/collectors/rules.md requires. A collector is "complete" only with all
+four. It also counts the open core items ("not found" / "partial") in each notes file and the
+leads each collector left for the others, which is what the follow-up pass acts on.
 
 Exit code: 0 = built (or, with --status, all selected collectors complete), 1 = a required input
 is missing or invalid (or a collector is not complete), 2 = bad arguments.
@@ -61,7 +68,22 @@ PLACEHOLDER_RE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 PLATFORM_PLACEHOLDERS = {"other", "generic", "unknown", "none", "tbd", "n", "na", "common"}
 DRAFT = os.path.join("platform-{platform}", "sources.md")   # tokenization-platform-fetch output, beside the work dir
 UA_FILE = ".sec-user-agent"   # the SEC contact; edgar_search.py --user-agent-file reads it
-CLOSING_LISTS = ("Gaps", "Conflicts", "Leads")   # rules.md: notes end with these three lists
+CLOSING_LISTS = ("Core items", "Gaps", "Conflicts", "Leads")   # rules.md: notes end with these four lists
+FOLLOWUP_FILE = "followup-{LETTER}.md"
+FOLLOWUP_TEXT = (
+    "This is a follow-up run. Your earlier notes are in {WORK_DIR}/notes-{LETTER}.md and your raw "
+    "files in {WORK_DIR}/{LETTER}/; read both, but do not fetch a source again when its raw file is "
+    "already there. Then read {WORK_DIR}/followup-{LETTER}.md: it lists the leads the other "
+    "collectors left for you and your core items that are still open. Work only on those items. "
+    "Append what you find under a heading \"## Follow-up\", then delete the old closing lists and "
+    "end the file with updated Core items, Gaps, Conflicts and Leads lists for the whole run."
+)
+# a closing-list heading: "## Gaps", "**Leads for B**", "Core items:", "1. Conflicts", "- Leads for C"
+LIST_HEADING_RE = re.compile(
+    r"^\s*(?:#+\s*|\d+\.\s*|[-*]\s+)?\**\s*(core items|gaps|conflicts|leads)(?:\s+for\s+([a-d]))?"
+    r"\s*\**\s*:?\s*\**\s*(?:\([^)]*\))?\s*$", re.I)
+TOP_ITEM_RE = re.compile(r"^ ?(?:[-*]|\d+\.)\s+\S")   # nested (indented) bullets are not items
+OPEN_CORE_RE = re.compile(r"(?i):\s*\**\s*(?:not found|partial)\b")
 
 
 class BuildError(Exception):
@@ -184,11 +206,17 @@ def platform_sources(work_dir, platform):
                      "run the tokenization-platform-fetch skill for it first")
 
 
-def build(work_dir, collectors, platform_arg=None):
+def build(work_dir, collectors, platform_arg=None, followup=False):
     """Build bundles and prompts. Returns (rows, warnings)."""
     warnings = []
     if not os.path.isdir(work_dir):
         raise BuildError(f"work dir not found: {work_dir} (create it and write product.md first)")
+    if followup:
+        for letter in collectors:
+            path = os.path.join(work_dir, FOLLOWUP_FILE.format(LETTER=letter))
+            if not has_content(path):
+                raise BuildError(f"--followup: {path} is missing or empty; write the leads and open "
+                                 f"core items for collector {letter} first")
     product = read_text(os.path.join(work_dir, "product.md"), "product.md")
     if not product.strip():
         raise BuildError("product.md is empty")
@@ -237,7 +265,10 @@ def build(work_dir, collectors, platform_arg=None):
             "WORK_DIR": work_label,
             "SKILL_DIR": SKILL_DIR,
         }
-        values["RESUME"] = fill(RESUME_TEXT, values) if resumed else ""
+        if followup:
+            values["RESUME"] = fill(FOLLOWUP_TEXT, values)
+        else:
+            values["RESUME"] = fill(RESUME_TEXT, values) if resumed else ""
         prompt = fill(template, values)
         prompt = re.sub(r"\n{3,}", "\n\n", prompt)   # an empty {RESUME} line leaves a gap
         for path, text in ((bundle_path, bundle), (os.path.join(work_label, f"prompt-{letter}.md"), prompt)):
@@ -248,7 +279,8 @@ def build(work_dir, collectors, platform_arg=None):
                 raise BuildError(f"cannot write {path}: {e}")
         rows.append({"letter": letter, "role": COLLECTORS[letter][0], "bundle": bundle_path,
                      "lines": bundle.count("\n"),
-                     "prompt": os.path.join(work_label, f"prompt-{letter}.md"), "resumed": resumed})
+                     "prompt": os.path.join(work_label, f"prompt-{letter}.md"), "resumed": resumed,
+                     "followup": followup})
     return rows, warnings
 
 
@@ -260,19 +292,45 @@ def count_files(path):
     return total
 
 
+def closing_items(text):
+    """Top-level items under each closing list. Returns (core_items, leads) where leads maps the
+    target collector letter ("?" when the heading names none) to its item count."""
+    core, leads, current = [], {}, None
+    for line in text.split("\n"):
+        m = LIST_HEADING_RE.match(line)
+        if m:
+            name = m.group(1).lower()
+            current = ("leads", (m.group(2) or "?").upper()) if name == "leads" else (name, None)
+            continue
+        if re.match(r"^\s*#{1,6}\s", line):
+            current = None          # any other heading ends the list
+            continue
+        if current is None or not TOP_ITEM_RE.match(line):
+            continue
+        if current[0] == "core items":
+            core.append(line.strip())
+        elif current[0] == "leads":
+            leads[current[1]] = leads.get(current[1], 0) + 1
+    return core, leads
+
+
 def notes_status(work_dir, letter):
     """State of one collector's notes: missing / incomplete / complete."""
     path = os.path.join(work_dir, f"notes-{letter}.md")
     raw = count_files(os.path.join(work_dir, letter))
     if not os.path.isfile(path):
-        return {"letter": letter, "state": "missing", "facts": 0, "lists": [], "raw": raw}
+        return {"letter": letter, "state": "missing", "facts": 0, "lists": [], "raw": raw,
+                "core_total": 0, "core_open": 0, "leads": {}}
     text = read_text(path, f"notes-{letter}.md")
     facts = len(re.findall(r"(?m)^\s*src:", text))
     # a list heading may be "## Gaps", "**Gaps**", "Gaps:", "1. Gaps", "- Leads for B"
     lists = [name for name in CLOSING_LISTS
              if re.search(r"(?mi)^\s*(?:#+\s*|\d+\.\s*|[-*]\s+)?\**\s*" + name + r"\b", text)]
     state = "complete" if len(lists) == len(CLOSING_LISTS) else "incomplete"
-    return {"letter": letter, "state": state, "facts": facts, "lists": lists, "raw": raw}
+    core, leads = closing_items(text)
+    return {"letter": letter, "state": state, "facts": facts, "lists": lists, "raw": raw,
+            "core_total": len(core), "core_open": sum(bool(OPEN_CORE_RE.search(c)) for c in core),
+            "leads": {k: v for k, v in leads.items() if k != letter}}
 
 
 def status(work_dir, collectors):
@@ -298,7 +356,12 @@ def main(argv=None):
     ap.add_argument("--platform", help="override / confirm product.md's Platform line")
     ap.add_argument("--status", action="store_true",
                     help="build nothing; report whether each collector's notes are complete")
+    ap.add_argument("--followup", action="store_true",
+                    help="build follow-up prompts that point each collector at <work dir>/followup-<L>.md")
     args = ap.parse_args(argv)
+    if args.status and args.followup:
+        print("error: --status and --followup cannot be combined", file=sys.stderr)
+        return 2
     try:
         collectors = parse_collectors(args.collectors)
     except ValueError as e:
@@ -313,21 +376,37 @@ def main(argv=None):
         for r in rows:
             missing = [n for n in CLOSING_LISTS if n not in r["lists"]]
             detail = f"  missing lists: {', '.join(missing)}" if r["state"] == "incomplete" else ""
+            core = (f"  core open: {r['core_open']}/{r['core_total']}"
+                    if r["state"] != "missing" else "")
             print(f"{r['letter']}  {COLLECTORS[r['letter']][0]:<30} {r['state']:<10} "
-                  f"{r['facts']:>4} facts  {r['raw']:>4} raw files{detail}")
+                  f"{r['facts']:>4} facts  {r['raw']:>4} raw files{core}{detail}")
         done = sum(r["state"] == "complete" for r in rows)
         print(f"{done}/{len(rows)} complete")
+        # leads aimed at each collector, from every collector's notes (not just the selected ones)
+        try:
+            everyone = rows if len(rows) == len(COLLECTORS) else status(args.work_dir, list(COLLECTORS))
+        except BuildError:
+            everyone = rows
+        for target in COLLECTORS:
+            sources = {r["letter"]: r["leads"][target] for r in everyone if r["leads"].get(target)}
+            if target in collectors and sources:
+                parts = ", ".join(f"{k}:{v}" for k, v in sources.items())
+                print(f"leads for {target}: {sum(sources.values())} ({parts})")
+        unaddressed = sum(r["leads"].get("?", 0) for r in everyone)
+        if unaddressed and len(collectors) == len(COLLECTORS):
+            print(f"leads without a target letter: {unaddressed}")
         return 0 if done == len(rows) else 1
     try:
-        rows, warnings = build(args.work_dir, collectors, args.platform)
+        rows, warnings = build(args.work_dir, collectors, args.platform, args.followup)
     except BuildError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
     for w in warnings:
         print(f"warning: {w}", file=sys.stderr)
     for r in rows:
+        mark = "  [follow-up]" if r["followup"] else ("  [resume]" if r["resumed"] else "")
         print(f"{r['letter']}  {r['role']:<30} {r['bundle']} ({r['lines']} lines)  "
-              f"{r['prompt']}{'  [resume]' if r['resumed'] else ''}")
+              f"{r['prompt']}{mark}")
     return 0
 
 

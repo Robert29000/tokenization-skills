@@ -25,13 +25,18 @@ primary source, trust the primary source and record the change in Appendix A.
    - Record document name, date, page / section number for every fact.
 3. **403 / 406 / bot protection.** Known blockers as of Oct 2026: `docs.midas.app`, Centrifuge
    HTML docs, DeFiLlama, BrokerCheck / IAPD, `invesco.com` (406 to curl), and MFSA (a Cloudflare
-   challenge to curl; try WebFetch). Fall back in this order and record which one worked:
-   llms.txt / `.md` → official mirror (regulator register, IPFS, EDGAR) → web search with
-   `site:` filter and quoted snippets → record as "not accessible" in Appendix A.
+   challenge to curl; try WebFetch). Fall back in the search order of the collector rules and
+   record which step worked: llms.txt / `.md` → official mirror (regulator register, IPFS,
+   EDGAR) → the issuer's own data endpoints and repositories → web and GitHub search for the
+   exact title, file name or ISIN with the year → third parties that quote or mirror it
+   (secondary) → record as "not accessible" in Appendix A. Never get past a bot check
+   (no spoofed User-Agent, no headless browser).
 4. **Gated investor portals** (Securitize investor onboarding, data rooms): never try to log in.
    Use public copies (EDGAR, regulator registers, forum posts where the issuer quoted the
    documents, risk-curator reviews that cite section numbers) and list the gated document as
    unread in Appendix A.
+5. **Rate limits**: on HTTP 429 or a result capped at the API's maximum, back off, narrow the
+   query and switch endpoint (another public RPC or explorer) before recording a gap.
 
 ## Cross-platform sources
 
@@ -48,6 +53,8 @@ primary source, trust the primary source and record the change in Appendix A.
 | Governance forums | `scripts/forum_search.py` — see `references/forums.md` | onboarding disclosures, risk-curator legal reviews |
 | VaultStreet | `https://app.vaultstreet.com/research/{ticker-lowercase}` | independent research (USTB, JTRSY, JAAA, mWIN, mGLO covered as of Oct 2026) — cite as secondary |
 | Attestations | e.g. Chronicle proof-of-asset dashboards, Chainlink PoR, auditor attestations | reserve verification |
+| Issuer transparency / proof-of-reserve data | the issuer's transparency or holdings API (often what its product page calls in the browser), its proof-of-reserve repository on GitHub (token config, attestation records), on-chain attestation contracts | portfolio composition and reserves when the product page is blocked; say whether an attestation covers the holdings or only the total |
+| Third-party mirrors and reserve monitors | GitHub search for issues and pull requests (`https://api.github.com/search/issues?q="<file name or product>"` works without a token; code search needs one, so use a web search with `site:github.com`), reserve monitors and dashboards that quote issuer APIs, research write-ups that link documents | copies or links of blocked offering documents and portfolio data. Always secondary: say who quotes whom, and fetch the original from the link they give when it works |
 
 ### Regulator registers
 

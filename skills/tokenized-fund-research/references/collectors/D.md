@@ -14,3 +14,8 @@ Collect what lending-protocol governance forums and risk curators say about the 
 6. If the platform part of this bundle names a forum that has no file in `references/forums/` (e.g. the platform's own governance forum), `forum_search.py` can't reach it. List it under **Gaps** so a forum file can be added.
 
 Curator statements are opinions. Record them as "<author> considers / recommends …".
+
+## Core items
+
+1. **Asset-specific threads and curator reviews**: every thread and risk-curator review about the product on each forum, or a recorded empty search for each forum.
+2. **Listing status per protocol**: proposed / live / offboarded / rejected, with the date of the latest post that shows it.
