@@ -7,8 +7,8 @@ Validates the shape (heading, "checked in" date, Products line, Docs / Legal / G
 bullets) and flags content that has no place in a list of pointers: template placeholders,
 hidden characters (zero-width, bidi override, Unicode tags, terminal escapes), HTML and Markdown
 images, email addresses, instructions addressed to an AI, and shell commands that install or
-execute. It also warns about look-alike letters (Cyrillic or Greek mixed into a Latin word or
-host). Hidden characters are the reason this is a script: a reader can't see them. Every future research run reads this file, so the check is a
+execute. A non-ASCII letter in a URL or host is an error (a look-alike of another site); one mixed
+into an ordinary Latin word is a warning. Hidden characters are the reason this is a script: a reader can't see them. Every future research run reads this file, so the check is a
 tripwire in front of the human review, not a replacement for it.
 
 Exit code: 0 = no errors (warnings allowed), 1 = errors or unreadable file, 2 = bad arguments.
@@ -40,7 +40,8 @@ HTML_RE = re.compile(r"(?i)<!--|</?(?:script|iframe|img|a|div|span|style|link|me
 SCHEME_RE = re.compile(r"(?i)\b(?:javascript|data|file|vbscript):")
 IMAGE_RE = re.compile(r"!\[[^\]\n]*\]\s*[\[(]")   # a Markdown image loads a URL when rendered
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
-HOST_RE = re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://([^/\s`<>()\[\]\"']+)")
+TOKEN_SPLIT_RE = re.compile(r"[\s`<>()\[\]\"'|,;]+")
+URL_SCHEME_RE = re.compile(r"(?i)^[a-z][a-z0-9+.-]*://")
 WORD_RE = re.compile(r"[^\W_]+")
 LOOKALIKE_SCRIPTS = ("CYRILLIC", "GREEK", "ARMENIAN", "CHEROKEE", "FULLWIDTH")
 INSTRUCTION_RES = [
@@ -54,17 +55,36 @@ INSTRUCTION_RES = [
                r"|obey|execute|exfiltrate|upload|send (?:your |the |all )?(?:notes|files|data|contents?))"),
 ]
 COMMAND_RE = re.compile(
-    r"(?i)\|\s*(?:sh|bash|zsh|python3?|node|perl|ruby)\b"
-    r"|\b(?:sudo|rm -rf|chmod \+x|pip3? install|npm (?:install|i)|npx|yarn add|pnpm add|brew install"
-    r"|apt(?:-get)? install|eval|exec)\b"
+    r"(?i)\|\s*(?:sudo\s+)?(?:sh|bash|zsh|dash|python3?|node|perl|ruby|iex)\b"
+    r"|\b(?:ba|z|da|k)?sh\s+(?:-c\b|<\()"            # sh -c "$(curl …)", bash <(curl …)
+    r"|\bsource\s+<\(|(?:^|[\s;&])\.\s+<\("           # source <(curl …), . <(curl …)
+    r"|&&\s*(?:sudo\s+)?(?:(?:ba|z|da)?sh\b|\./|make\b)"   # curl -o i.sh … && sh i.sh / && ./x / && make
+    r"|\bgit clone\b[^\n]*&&"
+    r"|\b(?:sudo|rm -rf|chmod \+x|pip3? install|pipx (?:install|run)|uvx|npm (?:install|i|ci|run|exec)|npx"
+    r"|yarn (?:add|install|run)|pnpm (?:add|install|run|dlx)|bunx|bun (?:add|install|run)|deno run"
+    r"|brew install|apt(?:-get)? install|cargo (?:install|run)|go (?:install|run)|make install"
+    r"|forge (?:build|test|script|install)|hardhat (?:run|test|compile)|docker (?:run|exec|compose)"
+    r"|invoke-expression|eval|exec)\b"
+    r"|(?-i:\biex\b)"                                 # PowerShell Invoke-Expression; "IEX" the exchange is fine
     r"|(?-i:\bcurl\b[^\n`]*\s-[a-zA-Z]*[OJ]\b)")   # -O / -J take the file name from the server
 
 
-def lookalike(line):
-    """Return the first word or URL host that mixes look-alike letters into Latin text, else None."""
-    for host in HOST_RE.findall(line):
-        if any(ord(ch) > 127 for ch in host):
+def lookalike_host(line):
+    """Return the first URL or bare host (word.word…) that holds a non-ASCII letter, else None.
+
+    A look-alike letter in a host points the collectors at a different site, and a reviewer can't
+    see it, so it is an error. The issuers in scope don't use internationalised domains.
+    """
+    for token in TOKEN_SPLIT_RE.split(line):
+        rest = URL_SCHEME_RE.sub("", token)
+        host = re.split(r"[/?#]", rest, maxsplit=1)[0].rsplit("@", 1)[-1].rstrip(".:!")
+        if re.fullmatch(r"[^.\s]+(?:\.[^.\s]+)+", host) and any(ord(ch) > 127 for ch in host):
             return host
+    return None
+
+
+def lookalike(line):
+    """Return the first word that mixes look-alike letters (Cyrillic, Greek…) into Latin text, else None."""
     for word in WORD_RE.findall(line):
         if any(ch.isascii() for ch in word) and any(
                 unicodedata.name(ch, "").startswith(LOOKALIKE_SCRIPTS) for ch in word if not ch.isascii()):
@@ -145,10 +165,14 @@ def check_text(text):
             out.append(Finding("ERROR", n, "install / execute command; collectors never run code from a sources file"))
         if re.search(r"(?i)\bhttp://", line):
             out.append(Finding("WARNING", n, "http:// link; use https:// if the site supports it"))
-        odd = lookalike(line)
+        host = lookalike_host(line)
+        odd = None if host else lookalike(line)
+        if host:
+            out.append(Finding("ERROR", n, f"host '{host}' has a non-ASCII letter (look-alike of another site?); "
+                                           "retype it in plain ASCII from the fetched URL"))
         if odd:
             out.append(Finding("WARNING", n, f"'{odd}' mixes look-alike letters (Cyrillic, Greek…) into "
-                                             "Latin text or a host; retype it in plain ASCII"))
+                                             "Latin text; retype it in plain ASCII"))
     if len(lines) > MAX_LINES:
         out.append(Finding("WARNING", None, f"{len(lines)} lines; keep it a short list of pointers (shipped files are under 40)"))
     return out
